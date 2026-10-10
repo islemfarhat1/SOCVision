@@ -1,0 +1,38 @@
+﻿# Secrets and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Databases and dumps
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Local IDE
+.vscode/
+.idea/
+
+# Sensitive local configuration
