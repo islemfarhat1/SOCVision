@@ -64,7 +64,7 @@ jobs:
             --config p/typescript \
             backend/src frontend/src --error
 
-  dependency-scan:
+    dependency-scan:
     name: Trivy Dependency Scan
     runs-on: ubuntu-latest
 
@@ -75,12 +75,13 @@ jobs:
       - name: Install Trivy
         run: |
           curl -fL --retry 3 \
-            -o trivy.deb \
-            https://github.com/aquasecurity/trivy/releases/download/v0.67.2/trivy_0.67.2_Linux-64bit.deb
+            -o trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.67.2/trivy_0.67.2_Linux-64bit.tar.gz
 
-          sudo dpkg -i trivy.deb
-
+          tar -xzf trivy.tar.gz trivy
+          sudo install trivy /usr/local/bin/trivy
           trivy --version
+
       - name: Scan dependencies
         run: |
           trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 .
