@@ -39,3 +39,22 @@ jobs:
 
       - name: Run Semgrep
         run: semgrep scan --config p/python --config p/javascript --config p/typescript backend/src frontend/src --error
+
+
+          dependency-scan:
+    name: Trivy Dependency Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: '0'
