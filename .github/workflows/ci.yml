@@ -74,10 +74,29 @@ jobs:
 
       - name: Install Trivy
         run: |
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b "$HOME/.local/bin" v0.67.2
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fL --retry 3 \
+            -o trivy.deb \
+            https://github.com/aquasecurity/trivy/releases/download/v0.67.2/trivy_0.67.2_Linux-64bit.deb
+
+          sudo dpkg -i trivy.deb
+
+          trivy --version
+  dependency-scan:
+    name: Trivy Dependency Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          curl -fL --retry 3 \
+            -o trivy.deb \
+            https://github.com/aquasecurity/trivy/releases/download/v0.67.2/trivy_0.67.2_Linux-64bit.deb
+
+          sudo dpkg -i trivy.deb
+          trivy --version
 
       - name: Scan dependencies
         run: |
