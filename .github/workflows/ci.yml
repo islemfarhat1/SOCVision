@@ -39,9 +39,7 @@ jobs:
 
       - name: Run Semgrep
         run: semgrep scan --config p/python --config p/javascript --config p/typescript backend/src frontend/src --error
-
-
-          dependency-scan:
+  dependency-scan:
     name: Trivy Dependency Scan
     runs-on: ubuntu-latest
 
