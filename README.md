@@ -125,4 +125,4 @@ Interests: Cybersecurity, AI-Assisted Security Operations, Security Automation
 
 - **GitHub:** https://github.com/islemfarhat1
 - **Portfolio:** https://islem-farhat-portfolio.vercel.app/
-- **LinkedIn:** Add your LinkedIn profile URL
+- **LinkedIn:** https://www.linkedin.com/in/islem-farhat/
