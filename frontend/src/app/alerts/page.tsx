@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { fetchAlertPage, fetchAlertStatusCounts, type AlertStatusCounts } from "
 import { AuthGuard } from "@/components/auth-guard";
 import { ArrowDown, ArrowUp, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/time";
 
 type Alert = {
   id: number;
@@ -51,17 +52,45 @@ const TABS = {
 } as const;
 type TabKey = keyof typeof TABS;
 
-const SEVERITY_OPTIONS = { all: "All", CRITICAL: "Critical", HIGH: "High", MEDIUM: "Medium", LOW: "Low" };
+const SEVERITY_OPTIONS: Record<string, string> = {
+  all: "All",
+  "CRITICAL,HIGH": "Critical & high",
+  CRITICAL: "Critical",
+  HIGH: "High",
+  MEDIUM: "Medium",
+  LOW: "Low",
+};
 const SOURCE_OPTIONS = { all: "All", wazuh: "Wazuh lab", cicids: "CICIDS2017" };
 
 type SortField = "score" | "created_at";
 const PAGE_SIZE = 20;
 
+// Filters can be preset from the URL, e.g. /alerts?tab=triage&severity=CRITICAL,HIGH
+// (used by the dashboard KPIs). useSearchParams needs a Suspense boundary.
 export default function AlertsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AlertQueue />
+    </Suspense>
+  );
+}
+
+function initialFrom<T extends string>(value: string | null, allowed: readonly T[], fallback: T): T {
+  return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function AlertQueue() {
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const [tab, setTabState] = useState<TabKey>("triage");
-  const [severity, setSeverityState] = useState("all");
-  const [source, setSourceState] = useState("all");
+  const [tab, setTabState] = useState<TabKey>(() =>
+    initialFrom(searchParams.get("tab"), Object.keys(TABS) as TabKey[], "triage")
+  );
+  const [severity, setSeverityState] = useState(() =>
+    initialFrom(searchParams.get("severity"), Object.keys(SEVERITY_OPTIONS), "all")
+  );
+  const [source, setSourceState] = useState(() =>
+    initialFrom(searchParams.get("source"), Object.keys(SOURCE_OPTIONS), "all")
+  );
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ field: SortField; order: "asc" | "desc" }>({ field: "score", order: "desc" });
@@ -380,23 +409,4 @@ function SortButton({
 function detectionLabel(attackType: string): string {
   const match = attackType.match(/\(([^)]+)\)\s*$/);
   return match ? match[1] : attackType;
-}
-
-const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["year", 365 * 24 * 3600],
-  ["month", 30 * 24 * 3600],
-  ["day", 24 * 3600],
-  ["hour", 3600],
-  ["minute", 60],
-];
-
-function timeAgo(date: string): string {
-  const seconds = (Date.now() - new Date(date).getTime()) / 1000;
-  if (Number.isNaN(seconds)) return "—";
-  if (seconds < 60) return "just now";
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto", style: "short" });
-  for (const [unit, size] of UNITS) {
-    if (seconds >= size) return rtf.format(-Math.floor(seconds / size), unit);
-  }
-  return "just now";
 }

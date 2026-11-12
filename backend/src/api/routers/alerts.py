@@ -26,7 +26,8 @@ def _clean(df):
 def _filter_alerts(df, severity=None, attack_type=None, source=None, search=None):
     """Filtres communs à la liste et aux compteurs (le statut est traité à part)."""
     if severity:
-        df = df[df["severity"] == severity.upper()]
+        severities = [s.strip().upper() for s in severity.split(",") if s.strip()]
+        df = df[df["severity"].isin(severities)]
     if attack_type:
         df = df[df["attack_type"].str.contains(attack_type, case=False, na=False, regex=False)]
     if source:

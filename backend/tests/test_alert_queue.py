@@ -80,3 +80,11 @@ def test_status_counts_follow_filters():
 def test_status_counts_route_is_not_shadowed_by_alert_detail():
     # /alerts/{alert_id} must not swallow /alerts/status-counts
     assert client.get("/api/alerts/status-counts").status_code == 200
+
+
+def test_several_severities_at_once():
+    r = client.get("/api/alerts", params={"severity": "critical,HIGH", "status": "NEW,UNDER_REVIEW,ESCALATED"})
+    assert r.headers["X-Total-Count"] == "3"
+    assert {a["severity"] for a in r.json()} == {"CRITICAL", "HIGH"}
+    counts = client.get("/api/alerts/status-counts", params={"severity": "CRITICAL,HIGH"}).json()
+    assert counts == {"NEW": 1, "UNDER_REVIEW": 1, "ESCALATED": 1, "DISMISSED": 0}
