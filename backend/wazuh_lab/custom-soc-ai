@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+import sys
+import json
+import urllib.request
+import urllib.error
+import logging
+
+# Config log minimal vers syslog/stdout si nécessaire
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - custom-soc-ai - %(levelname)s - %(message)s")
+
+def main():
+    if len(sys.argv) < 3:
+        logging.error("Usage: custom-soc-ai <alert_file> <api_key> <hook_url>")
+        sys.exit(1)
+
+    alert_file_path = sys.argv[1]
+    # api_key = sys.argv[2] (non utilisé ici)
+    hook_url = sys.argv[3] if len(sys.argv) > 3 else "http://192.168.172.1:8000/api/alerts/wazuh/webhook"
+
+    # 1. Lecture du fichier JSON contenant l'alerte Wazuh
+    try:
+        with open(alert_file_path, "r", encoding="utf-8") as f:
+            alert_data = json.load(f)
+    except Exception as e:
+        logging.error(f"Erreur lecture fichier alerte {alert_file_path}: {e}")
+        sys.exit(1)
+
+    # 2. Preparation de la requête HTTP POST
+    try:
+        json_payload = json.dumps(alert_data).encode("utf-8")
+        req = urllib.request.Request(
+            hook_url,
+            data=json_payload,
+            headers={"Content-Type": "application/json", "User-Agent": "Wazuh-Integratord"}
+        )
+
+        # 3. Envoi au Webhook FastAPI
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status in (200, 201):
+                logging.info(f"Alerte Wazuh {alert_data.get('id')} transmise avec succès vers FastAPI ({response.status})")
+            else:
+                logging.warning(f"FastAPI a repondu avec le code HTTP {response.status}")
+
+    except urllib.error.HTTPError as e:
+        logging.error(f"Erreur HTTP lors de l'envoi de l'alerte vers FastAPI: {e.code} - {e.reason}")
+    except urllib.error.URLError as e:
+        logging.error(f"Erreur reseau/connexion vers FastAPI ({hook_url}): {e.reason}")
+    except Exception as e:
+        logging.error(f"Erreur inattendue lors de l'envoi vers FastAPI: {e}")
+
+if __name__ == "__main__":
+    main()

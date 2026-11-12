@@ -1,0 +1,137 @@
+[
+  {
+    "id": "1785250054.434907",
+    "attack": "Web Vulnerability Scan (Nikto)",
+    "timestamp": "2026-07-28T14:47:34.886+0000",
+    "rule_id": "31151",
+    "rule_level": 10,
+    "frequency_count": 1,
+    "description": "Multiple web server 400 error codes from same source ip.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1595.002"
+      ],
+      "tactic": [
+        "Reconnaissance"
+      ],
+      "technique": [
+        "Vulnerability Scanning"
+      ]
+    },
+    "raw_log": "192.168.56.20 - - [28/Jul/2026:12:40:17 +0000] \"GET /dvwa/cgi-bin/ HTTP/1.1\" 404 531 \"-\" \"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.6252.82 Mobile Safari/537.36\""
+  },
+  {
+    "id": "1785250055.444962",
+    "attack": "Web Vulnerability Scan (Nikto)",
+    "timestamp": "2026-07-28T14:47:35.412+0000",
+    "rule_id": "31151",
+    "rule_level": 10,
+    "frequency_count": 1,
+    "description": "Multiple web server 400 error codes from same source ip.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1595.002"
+      ],
+      "tactic": [
+        "Reconnaissance"
+      ],
+      "technique": [
+        "Vulnerability Scanning"
+      ]
+    },
+    "raw_log": "192.168.56.20 - - [28/Jul/2026:12:40:17 +0000] \"GET /dvwa/cgi-bin-sdb/ HTTP/1.1\" 404 531 \"-\" \"Mozilla/5.0 (Linux; Android 15; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.6286.11 Mobile Safari/537.36\""
+  },
+  {
+    "id": "1785250055.455017",
+    "attack": "Web Vulnerability Scan (Nikto)",
+    "timestamp": "2026-07-28T14:47:35.464+0000",
+    "rule_id": "31151",
+    "rule_level": 10,
+    "frequency_count": 1,
+    "description": "Multiple web server 400 error codes from same source ip.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1595.002"
+      ],
+      "tactic": [
+        "Reconnaissance"
+      ],
+      "technique": [
+        "Vulnerability Scanning"
+      ]
+    },
+    "raw_log": "192.168.56.20 - - [28/Jul/2026:12:40:17 +0000] \"GET /dvwa/dvwa/actuator/threaddump HTTP/1.1\" 404 531 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.6252.12 Safari/537.36\""
+  },
+  {
+    "id": "1785250055.465174",
+    "attack": "Web Vulnerability Scan (Nikto)",
+    "timestamp": "2026-07-28T14:47:35.512+0000",
+    "rule_id": "31151",
+    "rule_level": 10,
+    "frequency_count": 1,
+    "description": "Multiple web server 400 error codes from same source ip.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1595.002"
+      ],
+      "tactic": [
+        "Reconnaissance"
+      ],
+      "technique": [
+        "Vulnerability Scanning"
+      ]
+    },
+    "raw_log": "192.168.56.20 - - [28/Jul/2026:12:40:17 +0000] \"GET /dvwa/Autodiscover/Autodiscover.xml HTTP/1.0\" 404 527 \"-\" \"Mozilla/5.0 (Android 14; Mobile; rv:133.0) Gecko/133.0 Firefox/133.0\""
+  },
+  {
+    "id": "1785250055.474521",
+    "attack": "Web Vulnerability Scan (Nikto)",
+    "timestamp": "2026-07-28T14:47:35.547+0000",
+    "rule_id": "31151",
+    "rule_level": 10,
+    "frequency_count": 1,
+    "description": "Multiple web server 400 error codes from same source ip.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1595.002"
+      ],
+      "tactic": [
+        "Reconnaissance"
+      ],
+      "technique": [
+        "Vulnerability Scanning"
+      ]
+    },
+    "raw_log": "192.168.56.20 - - [28/Jul/2026:12:40:17 +0000] \"GET /dvwa/PowerShell HTTP/1.0\" 404 527 \"-\" \"Mozilla/5.0 (Android 14; Mobile; rv:133.0) Gecko/133.0 Firefox/133.0\""
+  }
+]

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "1785321066.733019",
+    "attack": "RDP Bruteforce / Pass-the-Hash",
+    "timestamp": "2026-07-29T10:31:06.210+0000",
+    "rule_id": "92657",
+    "rule_level": 6,
+    "frequency_count": 1,
+    "description": "Successful Remote Logon Detected - User:\\islem - NTLM authentication, possible pass-the-hash attack - Possible RDP connection. Verify that kali is allowed to perform RDP connections",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.40",
+    "src_port": 0,
+    "dst_port": 3389,
+    "dst_user": "islem",
+    "agent_name": "DESKTOP-M36GQTK",
+    "mitre": {
+      "id": [
+        "T1550.002",
+        "T1078.002",
+        "T1021.001"
+      ],
+      "tactic": [
+        "Defense Evasion",
+        "Lateral Movement",
+        "Persistence",
+        "Privilege Escalation",
+        "Initial Access"
+      ],
+      "technique": [
+        "Pass the Hash",
+        "Domain Accounts",
+        "Remote Desktop Protocol"
+      ]
+    },
+    "raw_log": "{\"win\":{\"system\":{\"providerName\":\"Microsoft-Windows-Security-Auditing\",\"providerGuid\":\"{54849625-5478-4994-a5ba-3e3b0328c30d}\",\"eventID\":\"4624\",\"version\":\"2\",\"level\":\"0\",\"task\":\"12544\",\"opcode\":\"0\",\"keywords\":\"0x8020000000000000\",\"systemTime\":\"2026-07-29T10:43:02.8357767Z\",\"eventRecordID\":\"18442\",\"processID\":\"732\",\"threadID\":\"768\",\"channel\":\"Security\",\"computer\":\"DESKTOP-M36GQTK\",\"severityValue\":\"AUDIT_SUCCESS\",\"message\":\"\\\"L'ouverture de session d'un compte s'est correctement déroulée.\\r\\n\\r\\nObjet :\\r\\n\\tID de sécurité :\\t\\tS-1-0-0\\r\\n\\tNom du compte :\\t\\t-\\r\\n\\tDomaine du compte :\\t\\t-\\r\\n\\tID d'ouverture de session :\\t\\t0x0\\r\\n\\r\\nInformations d'ouverture de session :\\r\\n\\tType d'ouverture de session :\\t\\t3\\r\\n\\tMode administrateur restreint :\\t-\\r\\n\\tCompte virtuel :\\t\\tNon\\r\\n\\tJeton élevé :\\t\\tNon\\r\\n\\r\\nNiveau d'emprunt d'identité :\\t\\tEmprunt d’identité\\r\\n\\r\\nNouvelle ouverture de session :\\r\\n\\tID de sécurité :\\t\\tS-1-5-21-3297693425-82473969-1902589154-1001\\r\\n\\tNom du compte :\\t\\tislem\\r\\n\\tDomaine du compte :\\t\\tDESKTOP-M36GQTK\\r\\n\\tID d'ouverture de session :\\t\\t0x1BF62D\\r\\n\\tID d'ouverture de session liée :\\t\\t0x0\\r\\n\\tNom du compte réseau :\\t-\\r\\n\\tDomaine du compte réseau :\\t-\\r\\n\\tGUID d'ouverture de session :\\t\\t{00000000-0000-0000-0000-000000000000}\\r\\n\\r\\nInformations sur le processus :\\r\\n\\tID du processus :\\t\\t0x0\\r\\n\\tNom du processus :\\t\\t-\\r\\n\\r\\nInformations sur le réseau :\\r\\n\\tNom de la station de travail :\\tkali\\r\\n\\tAdresse du réseau source :\\t192.168.56.20\\r\\n\\tPort source :\\t\\t0\\r\\n\\r\\nInformations détaillées sur l'authentification :\\r\\n\\tProcessus d'ouverture de session :\\t\\tNtLmSsp \\r\\n\\tPackage d'authentification :\\tNTLM\\r\\n\\tServices en transit :\\t-\\r\\n\\tNom du package (NTLM uniquement) :\\tNTLM V2\\r\\n\\tLongueur de la clé :\\t\\t128\\r\\n\\r\\nCet événement est généré lors de la création d'une ouverture de session. Il est généré sur l'ordinateur sur lequel l'ouverture de session a été effectuée.\\r\\n\\r\\nLe champ Objet indique le compte sur le système local qui a demandé l'ouverture de session. Il s'agit le plus souvent d'un service, comme le service Serveur, ou un processus local tel que Winlogon.exe ou Services.exe.\\r\\n\\r\\nLe champ Type d'ouverture de session indique le type d'ouverture de session qui s'est produit. Les types les plus courants sont 2 (interactif) et 3 (réseau).\\r\\n\\r\\nLe champ Nouvelle ouverture de session indique le compte pour lequel la nouvelle ouverture de session a été créée, par exemple, le compte qui s'est connecté.\\r\\n\\r\\nLes champs relatifs au réseau indiquent la provenance d'une demande d'ouverture de session à distance. Le nom de la station de travail n'étant pas toujours disponible, peut être laissé vide dans certains cas.\\r\\n\\r\\nLe champ du niveau d'emprunt d'identité indique la portée de l'emprunt d'identité que peut prendre un processus dans la session d'ouverture de session.\\r\\n\\r\\nLes champs relatifs aux informations d'authentification fournissent des détails sur cette demande d'ouverture de session spécifique.\\r\\n\\t- Le GUID d'ouverture de session est un identificateur unique pouvant servir à associer cet événement à un événement KDC .\\r\\n\\t- Les services en transit indiquent les services intermédiaires qui ont participé à cette demande d'ouverture de session.\\r\\n\\t- Nom du package indique quel est le sous-protocole qui a été utilisé parmi les protocoles NTLM.\\r\\n\\t- La longueur de la clé indique la longueur de la clé de session générée. Elle a la valeur 0 si aucune clé de session n'a été demandée.\\\"\"},\"eventdata\":{\"subjectUserSid\":\"S-1-0-0\",\"subjectLogonId\":\"0x0\",\"targetUserSid\":\"S-1-5-21-3297693425-82473969-1902589154-1001\",\"targetUserName\":\"islem\",\"targetDomainName\":\"DESKTOP-M36GQTK\",\"targetLogonId\":\"0x1bf62d\",\"logonType\":\"3\",\"logonProcessName\":\"NtLmSsp\",\"authenticationPackageName\":\"NTLM\",\"workstationName\":\"kali\",\"logonGuid\":\"{00000000-0000-0000-0000-000000000000}\",\"lmPackageName\":\"NTLM V2\",\"keyLength\":\"128\",\"processId\":\"0x0\",\"ipAddress\":\"192.168.56.20\",\"ipPort\":\"0\",\"impersonationLevel\":\"%%1833\",\"virtualAccount\":\"%%1843\",\"targetLinkedLogonId\":\"0x0\",\"elevatedToken\":\"%%1843\"}}}"
+  }
+]

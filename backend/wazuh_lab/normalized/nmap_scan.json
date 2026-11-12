@@ -1,0 +1,107 @@
+[
+  {
+    "id": "1785174304.152725",
+    "attack": "Network Scan (Nmap)",
+    "timestamp": "2026-07-27T17:45:04.187+0000",
+    "rule_id": "31101",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "Web server 400 error code.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [],
+      "tactic": [],
+      "technique": []
+    },
+    "raw_log": "192.168.56.20 - - [27/Jul/2026:17:45:02 +0000] \"PROPFIND / HTTP/1.1\" 405 563 \"-\" \"Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\""
+  },
+  {
+    "id": "1785174304.153226",
+    "attack": "Network Scan (Nmap)",
+    "timestamp": "2026-07-27T17:45:04.187+0000",
+    "rule_id": "31101",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "Web server 400 error code.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [],
+      "tactic": [],
+      "technique": []
+    },
+    "raw_log": "192.168.56.20 - - [27/Jul/2026:17:45:02 +0000] \"GET /.git/HEAD HTTP/1.1\" 404 495 \"-\" \"Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\""
+  },
+  {
+    "id": "1785174304.153731",
+    "attack": "Network Scan (Nmap)",
+    "timestamp": "2026-07-27T17:45:04.188+0000",
+    "rule_id": "31101",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "Web server 400 error code.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [],
+      "tactic": [],
+      "technique": []
+    },
+    "raw_log": "192.168.56.20 - - [27/Jul/2026:17:45:02 +0000] \"PROPFIND / HTTP/1.1\" 405 563 \"-\" \"Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\""
+  },
+  {
+    "id": "1785174304.154232",
+    "attack": "Network Scan (Nmap)",
+    "timestamp": "2026-07-27T17:45:04.188+0000",
+    "rule_id": "31101",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "Web server 400 error code.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [],
+      "tactic": [],
+      "technique": []
+    },
+    "raw_log": "192.168.56.20 - - [27/Jul/2026:17:45:02 +0000] \"POST /sdk HTTP/1.1\" 404 495 \"-\" \"Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\""
+  },
+  {
+    "id": "1785174304.154732",
+    "attack": "Network Scan (Nmap)",
+    "timestamp": "2026-07-27T17:45:04.205+0000",
+    "rule_id": "31101",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "Web server 400 error code.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 0,
+    "dst_port": 80,
+    "dst_user": "unknown",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [],
+      "tactic": [],
+      "technique": []
+    },
+    "raw_log": "192.168.56.20 - - [27/Jul/2026:17:45:02 +0000] \"GET /nmaplowercheck1785174296 HTTP/1.1\" 404 495 \"-\" \"Mozilla/5.0 (compatible; Nmap Scripting Engine; https://nmap.org/book/nse.html)\""
+  }
+]

@@ -1,0 +1,152 @@
+[
+  {
+    "id": "1785176413.314500",
+    "attack": "SSH Bruteforce (Hydra)",
+    "timestamp": "2026-07-27T18:20:13.884+0000",
+    "rule_id": "5760",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "sshd: authentication failed.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 49190,
+    "dst_port": 22,
+    "dst_user": "soc",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1110.001",
+        "T1021.004"
+      ],
+      "tactic": [
+        "Credential Access",
+        "Lateral Movement"
+      ],
+      "technique": [
+        "Password Guessing",
+        "SSH"
+      ]
+    },
+    "raw_log": "Jul 27 18:20:13 victime sshd-session[2733]: Failed password for soc from 192.168.56.20 port 49190 ssh2"
+  },
+  {
+    "id": "1785176413.314976",
+    "attack": "SSH Bruteforce (Hydra)",
+    "timestamp": "2026-07-27T18:20:13.932+0000",
+    "rule_id": "5760",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "sshd: authentication failed.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 49204,
+    "dst_port": 22,
+    "dst_user": "soc",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1110.001",
+        "T1021.004"
+      ],
+      "tactic": [
+        "Credential Access",
+        "Lateral Movement"
+      ],
+      "technique": [
+        "Password Guessing",
+        "SSH"
+      ]
+    },
+    "raw_log": "Jul 27 18:20:13 victime sshd-session[2735]: Failed password for soc from 192.168.56.20 port 49204 ssh2"
+  },
+  {
+    "id": "1785176413.315452",
+    "attack": "SSH Bruteforce (Hydra)",
+    "timestamp": "2026-07-27T18:20:13.932+0000",
+    "rule_id": "5760",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "sshd: authentication failed.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 49216,
+    "dst_port": 22,
+    "dst_user": "soc",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1110.001",
+        "T1021.004"
+      ],
+      "tactic": [
+        "Credential Access",
+        "Lateral Movement"
+      ],
+      "technique": [
+        "Password Guessing",
+        "SSH"
+      ]
+    },
+    "raw_log": "Jul 27 18:20:13 victime sshd-session[2738]: Failed password for soc from 192.168.56.20 port 49216 ssh2"
+  },
+  {
+    "id": "1785176413.315928",
+    "attack": "SSH Bruteforce (Hydra)",
+    "timestamp": "2026-07-27T18:20:13.932+0000",
+    "rule_id": "5760",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "sshd: authentication failed.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 49174,
+    "dst_port": 22,
+    "dst_user": "soc",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1110.001",
+        "T1021.004"
+      ],
+      "tactic": [
+        "Credential Access",
+        "Lateral Movement"
+      ],
+      "technique": [
+        "Password Guessing",
+        "SSH"
+      ]
+    },
+    "raw_log": "Jul 27 18:20:13 victime sshd-session[2732]: Failed password for soc from 192.168.56.20 port 49174 ssh2"
+  },
+  {
+    "id": "1785176413.316404",
+    "attack": "SSH Bruteforce (Hydra)",
+    "timestamp": "2026-07-27T18:20:13.932+0000",
+    "rule_id": "5760",
+    "rule_level": 5,
+    "frequency_count": 1,
+    "description": "sshd: authentication failed.",
+    "src_ip": "192.168.56.20",
+    "dst_ip": "192.168.56.10",
+    "src_port": 49208,
+    "dst_port": 22,
+    "dst_user": "soc",
+    "agent_name": "victime",
+    "mitre": {
+      "id": [
+        "T1110.001",
+        "T1021.004"
+      ],
+      "tactic": [
+        "Credential Access",
+        "Lateral Movement"
+      ],
+      "technique": [
+        "Password Guessing",
+        "SSH"
+      ]
+    },
+    "raw_log": "Jul 27 18:20:13 victime sshd-session[2736]: Failed password for soc from 192.168.56.20 port 49208 ssh2"
+  }
+]

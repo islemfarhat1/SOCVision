@@ -3,19 +3,31 @@ class PromptBuilder:
     Construit le prompt envoyé au LLM.
     """
 
+    # ── Public entry-points ──────────────────────────────────────────────────
+
     def build(self, alert):
 
         flow = alert.network_flow
 
         mitre_technique_display = alert.mitre_technique or "NONE MAPPED - do not invent one"
         mitre_tactic_display = alert.mitre_tactic or "NONE MAPPED - do not invent one"
-        source_display = "Wazuh (real attack lab)" if alert.event_type == "wazuh" else "CICIDS2017 (simulated dataset)"
+        source_display = (
+            "Wazuh (real attack lab)"
+            if alert.event_type == "wazuh"
+            else "CICIDS2017 (simulated dataset)"
+        )
 
         details = alert.score_details or {}
         attack_score = details.get("attack_type", "N/A")
         frequency_score = details.get("frequency", "N/A")
         reputation_score = details.get("ip_reputation", "N/A")
         mitre_score = details.get("mitre", "N/A")
+
+        # Build explicit reputation context so the LLM is never confused by a
+        # raw Python dict or a score of 0 that it might interpret as "clean".
+        rep = alert.ip_reputation          # dict from ReputationChecker, or None
+        assessment_status = self._get_assessment_status(rep)
+        reputation_context = self._build_reputation_context(flow.source_ip, rep)
 
         prompt = f"""
 You are a Senior Cybersecurity SOC Analyst assistant.
@@ -50,7 +62,7 @@ MITRE Technique (FINAL): {mitre_technique_display}
 MITRE Tactic (FINAL): {mitre_tactic_display}
 
 IOC STATUS:
-IP Reputation (FINAL): {alert.ip_reputation}
+{reputation_context}
 Engine Conclusion: a clean or unknown reputation does NOT reduce this
 alert's priority. Possible explanations include a newly compromised host,
 an attacker IP not yet listed by threat feeds, or an internal/private IP
@@ -96,6 +108,25 @@ STRICT RULES
 
 - Use ONLY the information provided. Do not invent details.
 
+- CRITICAL — IP REPUTATION RULE:
+  The IOC STATUS block above contains an "Assessment Status" field.
+  * If Assessment Status is NOT_APPLICABLE (private/internal IP):
+    You MUST state that the source IP belongs to a private or internal
+    network and was NOT evaluated by VirusTotal or AbuseIPDB.
+    You MUST NOT claim any external reputation result for this IP.
+    Write something like: "The source IP belongs to a private network and
+    was not evaluated by external reputation services. The alert remains
+    critical based on the detected attack activity, frequency, and other
+    available security indicators."
+  * If Assessment Status is UNKNOWN (no data available):
+    You MUST state that no reputation information was available for this IP.
+    You MUST NOT claim the IP is clean, safe, or unverified-clean.
+  * If Assessment Status is ASSESSED:
+    You MAY describe the reputation result only from the facts provided
+    in the IOC STATUS block. Do NOT add conclusions beyond those facts.
+  Under NO circumstances may you claim that VirusTotal or AbuseIPDB
+  checked an IP unless Assessment Status is ASSESSED.
+
 - Always output exactly 0.9 for the confidence field to indicate that you
   have understood the instructions and presented the facts clearly.
 
@@ -131,7 +162,9 @@ YOUR TASK
 1. Summarize the alert, mentioning its source ({source_display}).
 2. Explain the contribution of each scoring component listed above
    (attack type, frequency, IOC, MITRE).
-3. Comment on the IOC status using ONLY the Engine Conclusion given above.
+3. Comment on the IOC status using ONLY the Assessment Status and evidence
+   given in the IOC STATUS block above — follow the CRITICAL IP REPUTATION
+   RULE exactly.
 4. State the MITRE ATT&CK context using ONLY the technique/tactic given
    above, following the STRICT RULES exactly.
 5. Recommend concrete verification actions for the SOC analyst (e.g., correlate
@@ -148,6 +181,9 @@ These are NOT suggestions — repeat them consistently, never contradict them.
 If MITRE Technique says "NONE MAPPED", mention NO tactic or technique at all.
 If MITRE Technique gives a real value, you MUST mention it explicitly.
 Do not requalify the risk level.
+Assessment Status for source IP is: {assessment_status}
+If Assessment Status is NOT_APPLICABLE, do NOT claim any VirusTotal or
+AbuseIPDB result — the IP was never checked by those services.
 
 ========================
 RETURN ONLY VALID JSON
@@ -167,6 +203,81 @@ RETURN ONLY VALID JSON
         print("========================================\n")
 
         return prompt
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+
+    def _get_assessment_status(self, rep: dict | None) -> str:
+        """
+        Classify the reputation dict produced by ReputationChecker into one of:
+          NOT_APPLICABLE  – private / loopback / link-local IP (never checked)
+          UNKNOWN         – no data at all (rep is None or empty sources)
+          ASSESSED        – external services were actually queried
+        """
+        if rep is None:
+            return "UNKNOWN"
+        sources = rep.get("sources", {})
+        # ReputationChecker explicitly sets this sentinel for private IPs
+        if sources.get("External reputation") == "Not applicable":
+            return "NOT_APPLICABLE"
+        # VirusTotal / AbuseIPDB keys are only present when a real query ran
+        if "VirusTotal" in sources or "AbuseIPDB" in sources:
+            return "ASSESSED"
+        return "UNKNOWN"
+
+    def _build_reputation_context(self, source_ip: str, rep: dict | None) -> str:
+        """
+        Produce a structured, plain-English IOC STATUS block for the prompt.
+        Critically: a reputation score of 0 is NEVER presented as "clean".
+        """
+        status = self._get_assessment_status(rep)
+
+        if status == "NOT_APPLICABLE":
+            return (
+                f"Assessment Status: NOT_APPLICABLE\n"
+                f"Source IP {source_ip} is a private/internal address.\n"
+                f"External reputation checks (VirusTotal, AbuseIPDB) were NOT performed.\n"
+                f"No external reputation data is available for this IP."
+            )
+
+        if status == "UNKNOWN":
+            return (
+                f"Assessment Status: UNKNOWN\n"
+                f"No reputation information is available for source IP {source_ip}.\n"
+                f"External reputation checks could not be completed.\n"
+                f"A score of 0 does NOT mean the IP is clean — it means no data was obtained."
+            )
+
+        # ASSESSED — parse the actual results
+        reputation_label = rep.get("reputation", "unknown")        # type: ignore[union-attr]
+        rep_score = rep.get("score", "N/A")                        # type: ignore[union-attr]
+        sources = rep.get("sources", {})                           # type: ignore[union-attr]
+        vt = sources.get("VirusTotal")
+        abuse = sources.get("AbuseIPDB")
+
+        vt_summary = "N/A"
+        if isinstance(vt, dict):
+            vt_summary = (
+                f"malicious={vt.get('malicious', 0)}, "
+                f"suspicious={vt.get('suspicious', 0)}, "
+                f"harmless={vt.get('harmless', 0)}"
+            )
+
+        abuse_summary = "N/A"
+        if isinstance(abuse, dict):
+            abuse_summary = (
+                f"abuseConfidenceScore={abuse.get('abuseConfidenceScore', 'N/A')}, "
+                f"totalReports={abuse.get('totalReports', 'N/A')}"
+            )
+
+        return (
+            f"Assessment Status: ASSESSED\n"
+            f"Source IP {source_ip} was checked by external reputation services.\n"
+            f"Aggregated Reputation: {reputation_label} (score={rep_score})\n"
+            f"VirusTotal: {vt_summary}\n"
+            f"AbuseIPDB: {abuse_summary}"
+        )
+
+    # ── Incident report (unchanged logic) ────────────────────────────────────
 
     def build_incident_report_prompt(self, ticket: dict, alert: dict):
         return f"""

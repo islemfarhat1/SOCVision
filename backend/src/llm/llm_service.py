@@ -78,6 +78,32 @@ class LLMService:
                 prefix = "Critical alert detected. " if alert.priority == "CRITICAL" else "High-priority alert detected. "
                 summary = prefix + summary
 
+        # --- Validation ioc_assessment vs private/internal IP ---
+        source_ip = None
+        if hasattr(alert, "network_flow") and alert.network_flow:
+            source_ip = getattr(alert.network_flow, "source_ip", None)
+
+        is_private_ip = False
+        if source_ip:
+            import ipaddress
+            try:
+                ip_obj = ipaddress.ip_address(source_ip)
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved:
+                    is_private_ip = True
+            except ValueError:
+                pass
+
+        rep = getattr(alert, "ip_reputation", None) or {}
+        sources = rep.get("sources", {})
+        if is_private_ip or sources.get("External reputation") == "Not applicable":
+            hallucination_phrases = ["clean according to", "clean on virustotal", "clean in abuseipdb", "virustotal and abuseipdb", "reputation is clean"]
+            if any(p in ioc_assessment.lower() for p in hallucination_phrases) or not ioc_assessment:
+                ioc_assessment = (
+                    "The source IP belongs to a private network and was not evaluated by external "
+                    "reputation services. The alert remains critical based on the detected attack "
+                    "activity, frequency, and other available security indicators."
+                )
+
         print("FINAL MITRE CONTEXT:", repr(mitre_context))
         print("=====================================\n")
 
