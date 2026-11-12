@@ -2,7 +2,7 @@
 
 import {
   Shield, LayoutDashboard, Bell, Ticket,
-  Settings, ShieldCheck, FileText, Activity,
+  Settings, FileText, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, Role } from "@/lib/use-auth";
@@ -26,7 +26,6 @@ function getNavItems(role?: Role): NavItem[] {
         { label: "Reports", icon: FileText, href: "/reports" },
         { label: "Settings", icon: Settings, href: "/settings" },
       ];
-    case "SOC_MANAGER":
     case "MANAGER":
       return [
         { label: "Dashboard", icon: LayoutDashboard, href: "/" },
@@ -39,7 +38,6 @@ function getNavItems(role?: Role): NavItem[] {
         { label: "Alerts", icon: Bell, href: "/alerts" },
         { label: "Incidents", icon: Ticket, href: "/tickets" },
         { label: "Reports", icon: FileText, href: "/reports" },
-        { label: "Administration", icon: ShieldCheck, href: "/admin" },
         { label: "Settings", icon: Settings, href: "/settings" },
       ];
     default:
@@ -61,13 +59,6 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string; bo
     bg: "bg-violet-500/10",
     border: "border-violet-500/25",
     dot: "bg-violet-400",
-  },
-  SOC_MANAGER: {
-    label: "SOC Manager",
-    color: "text-emerald-300",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/25",
-    dot: "bg-emerald-400",
   },
   MANAGER: {
     label: "SOC Manager",

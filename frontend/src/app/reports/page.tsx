@@ -357,7 +357,7 @@ function ReportsContent() {
 
 export default function ReportsPage() {
   return (
-    <AuthGuard allowedRoles={["SOC_L2", "SOC_MANAGER", "MANAGER", "ADMIN"]}>
+    <AuthGuard allowedRoles={["SOC_L2", "MANAGER", "ADMIN"]}>
       <Sidebar />
       <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">Loading reports...</div>}>
         <ReportsContent />

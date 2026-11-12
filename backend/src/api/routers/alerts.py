@@ -17,7 +17,7 @@ def _clean(df):
 
 @router.get("", response_model=list[AlertSchema])
 def get_alerts(
-    current_user: Annotated[dict, Depends(require_role("SOC_L1", "ADMIN"))],
+    current_user: Annotated[dict, Depends(require_role("SOC_L1", "MANAGER", "ADMIN"))],
     severity: Optional[str] = None,
     attack_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -56,7 +56,7 @@ def get_alerts(
 
 
 @router.get("/{alert_id}", response_model=AlertSchema)
-def get_alert(alert_id: str, current_user: Annotated[dict, Depends(require_role("SOC_L1", "ADMIN"))]):
+def get_alert(alert_id: str, current_user: Annotated[dict, Depends(require_role("SOC_L1", "MANAGER", "ADMIN"))]):
     df = _clean(db.get_alerts_dataframe())
     row = df[df["alert_id"] == alert_id]
     if row.empty:

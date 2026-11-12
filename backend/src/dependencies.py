@@ -4,6 +4,9 @@ from fastapi.security import OAuth2PasswordBearer
 
 from src.security import decode_token
 
+# Rôles de la plateforme (SOC L3 retiré du périmètre : l'investigation est faite par le L2)
+VALID_ROLES = frozenset({"SOC_L1", "SOC_L2", "MANAGER", "ADMIN"})
+
 # URL de la route de login (uniquement pour la documentation OpenAPI)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -28,8 +31,12 @@ def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dict:
 def require_role(*allowed_roles: str):
     """
     Générateur de dépendance pour restreindre l'accès à certains rôles.
-    Utilisation: Depends(require_role("SOC_MANAGER", "ADMIN"))
+    Utilisation: Depends(require_role("MANAGER", "ADMIN"))
     """
+    unknown = set(allowed_roles) - VALID_ROLES
+    if unknown:
+        raise ValueError(f"Rôle(s) inconnu(s) dans require_role: {sorted(unknown)}")
+
     def role_dependency(current_user: Annotated[dict, Depends(get_current_user)]):
         if current_user.get("role") not in allowed_roles:
             raise HTTPException(status_code=403, detail="Not enough privileges")

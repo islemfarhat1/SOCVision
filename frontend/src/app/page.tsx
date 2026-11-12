@@ -740,7 +740,7 @@ function DashboardManager() {
 export default function HomePage() {
   const { user } = useAuth();
 
-  const isManager = user?.role === "SOC_MANAGER" || user?.role === ("MANAGER" as any);
+  const isManager = user?.role === "MANAGER";
 
   const title =
     user?.role === "SOC_L1" ? "SOC L1 — Triage Dashboard"

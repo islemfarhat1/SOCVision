@@ -105,7 +105,6 @@ class DatabaseManager:
                 ("sarra.bannour",  "Sarra Bannour",    "SOC_L1",  hashed),
                 ("ala.mabrouk",    "Ala Mabrouk",      "SOC_L2",  hashed),
                 ("ahlem.benahmed", "Ahlem Ben Ahmed",  "SOC_L2",  hashed),
-                ("youssef.gharbi", "Youssef Gharbi",   "SOC_L3",  hashed),
                 ("mariem.trabelsi","Mariem Trabelsi",  "MANAGER", hashed),
                 ("karim.bouazizi", "Karim Bouazizi",   "ADMIN",   hashed),
             ]
@@ -113,6 +112,9 @@ class DatabaseManager:
                 "INSERT INTO users (username, full_name, role, password_hash) VALUES (?, ?, ?, ?)",
                 default_users
             )
+
+        # Migration : le rôle SOC_L3 a été retiré du périmètre du projet
+        cursor.execute("DELETE FROM users WHERE role = 'SOC_L3'")
 
         connection.commit()
         connection.close()

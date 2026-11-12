@@ -328,7 +328,7 @@ The report MUST contain EXACTLY these 9 sections:
 1. Incident Summary
 2. Classification (Type, Severity, Status)
 3. Timeline
-4. Investigation Findings (Include L1 investigation notes and L2/L3 comments)
+4. Investigation Findings (Include L1 investigation notes and L2 comments)
 5. Indicators of Compromise
 6. MITRE ATT&CK Mapping
 7. Actions Taken
@@ -361,7 +361,7 @@ IOC Assessment: {alert.get('ioc_assessment', 'Not available')}
 
 -- Analyst Notes --
 L1 Investigation Notes: {alert.get('investigation_notes', 'Not available')}
-L2/L3 Ticket Comments: {ticket.get('comments', 'Not available')}
+L2 Ticket Comments: {ticket.get('comments', 'Not available')}
 
 Generate the Markdown report now:
 """

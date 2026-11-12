@@ -63,7 +63,7 @@ export default function IncidentsPage() {
   }, []);
 
   return (
-    <AuthGuard allowedRoles={["SOC_L2", "SOC_MANAGER", "MANAGER", "ADMIN"]}>
+    <AuthGuard allowedRoles={["SOC_L2", "MANAGER", "ADMIN"]}>
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title="Incidents Queue" />

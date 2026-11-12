@@ -174,7 +174,7 @@ export default function TicketDetailPage() {
   const matchedAnalyst = ticket ? analysts.find((a) => a.username === ticket.assigned_to || a.full_name === ticket.assigned_to) : null;
 
   return (
-    <AuthGuard allowedRoles={["SOC_L2", "SOC_MANAGER", "MANAGER", "ADMIN"]}>
+    <AuthGuard allowedRoles={["SOC_L2", "MANAGER", "ADMIN"]}>
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title={ticket ? `Ticket ${formatTicketId(ticket.ticket_id)} — ${ticket.incident_title}` : "Incident Dossier"} />

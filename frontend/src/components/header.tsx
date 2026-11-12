@@ -52,10 +52,6 @@ const ROLE_PILL: Record<string, { label: string; className: string }> = {
     label: "SOC L2",
     className: "bg-violet-500/10 text-violet-300 border-violet-500/25 ring-violet-500/10",
   },
-  SOC_MANAGER: {
-    label: "SOC Manager",
-    className: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25 ring-emerald-500/10",
-  },
   MANAGER: {
     label: "SOC Manager",
     className: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25 ring-emerald-500/10",

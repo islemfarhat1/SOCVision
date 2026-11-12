@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchAuthMe } from "@/lib/api";
 import { useRouter, usePathname } from "next/navigation";
 
-export type Role = "SOC_L1" | "SOC_L2" | "SOC_MANAGER" | "MANAGER" | "ADMIN";
+export type Role = "SOC_L1" | "SOC_L2" | "MANAGER" | "ADMIN";
 
 export type AuthUser = {
   username: string;
