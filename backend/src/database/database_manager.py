@@ -1,6 +1,9 @@
+import os
 import sqlite3
 import pandas as pd
 from datetime import datetime
+
+from config.settings import DATABASE_PATH
 
 
 class DatabaseManager:
@@ -8,8 +11,12 @@ class DatabaseManager:
     Gestionnaire SQLite pour le SOC (Alertes et Tickets).
     """
 
-    def __init__(self, db_path="database/soc_alerts.db"):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        # Même base que le reste de l'API (auth, users…) : DATABASE_PATH
+        self.db_path = db_path or DATABASE_PATH
+        parent = os.path.dirname(self.db_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self.create_tables()
 
     def create_tables(self):
