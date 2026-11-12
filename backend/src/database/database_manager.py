@@ -99,7 +99,18 @@ class DatabaseManager:
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             import bcrypt
-            hashed = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode("utf-8")
+            import secrets
+            from config.settings import SEED_USER_PASSWORD
+
+            seed_password = SEED_USER_PASSWORD
+            if not seed_password:
+                seed_password = secrets.token_urlsafe(12)
+                print(
+                    "\n[SECURITY] Demo accounts created with a generated password: "
+                    f"{seed_password}\n"
+                    "           Set SEED_USER_PASSWORD to choose it. This is shown only once.\n"
+                )
+            hashed = bcrypt.hashpw(seed_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
             default_users = [
                 ("ahmed.salem",    "Ahmed Salem",      "SOC_L1",  hashed),
                 ("sarra.bannour",  "Sarra Bannour",    "SOC_L1",  hashed),

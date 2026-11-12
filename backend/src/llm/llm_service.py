@@ -2,6 +2,13 @@ import re
 
 from src.llm.prompt_builder import PromptBuilder
 from src.llm.openrouter_client import OpenRouterClient
+
+REPORT_SYSTEM_PROMPT = (
+    "You are a senior SOC analyst writing an incident report. "
+    "Answer in Markdown, following exactly the section structure requested. "
+    "Never answer in JSON. Use only the evidence provided."
+)
+REPORT_MAX_TOKENS = 2500
 from src.llm.response_parser import ResponseParser
 
 MITRE_PATTERN = re.compile(r"T\d{4}(\.\d{3})?")
@@ -11,9 +18,6 @@ class LLMService:
     """
     Orchestration complète du pipeline LLM.
     """
-
-    LLM_PROVIDER = "ollama"
-    LLM_MODEL = "qwen2.5:7b"
 
     def __init__(self):
         self.prompt_builder = PromptBuilder()
@@ -131,6 +135,8 @@ class LLMService:
 
         prompt = self.prompt_builder.build(alert)
         response = self.client.generate(prompt)
+        alert.llm_provider = self.client.last_provider
+        alert.llm_model = self.client.last_model
 
         print("\n========== RAW RESPONSE ==========")
         print(response)
@@ -158,9 +164,12 @@ class LLMService:
 
         return alert
 
-    def generate_incident_report(self, ticket: dict, alert: dict) -> str:
+    def generate_incident_report(self, ticket: dict, alert: dict) -> str | None:
+        """Retourne le rapport Markdown, ou None si aucun modèle n'a répondu."""
         prompt = self.prompt_builder.build_incident_report_prompt(ticket, alert)
-        response = self.client.generate(prompt)
+        response = self.client.generate(
+            prompt, system_prompt=REPORT_SYSTEM_PROMPT, max_tokens=REPORT_MAX_TOKENS
+        )
 
         print("\n========== GENERATED REPORT ==========")
         print(response)

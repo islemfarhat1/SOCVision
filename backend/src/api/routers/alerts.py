@@ -6,7 +6,7 @@ import sqlite3
 from config.settings import DATABASE_PATH
 from src.database.database_manager import DatabaseManager
 from src.api.models import AlertSchema, AlertUpdateSchema, PromoteAlertSchema
-from src.dependencies import get_current_user, require_role
+from src.dependencies import get_current_user, require_role, verify_webhook_token
 from src.utils.notifier import notify_n8n
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
@@ -166,7 +166,7 @@ from src.ticketing.alert_generator import AlertGenerator
 from wazuh_lab.normalize_alerts import normalize, is_noise
 import uuid
 
-@router.post('/wazuh/webhook')
+@router.post('/wazuh/webhook', dependencies=[Depends(verify_webhook_token)])
 def receive_wazuh_webhook(payload: Dict[Any, Any]):
     agent_name = payload.get('agent', {}).get('name', 'unknown')
     rule_id = payload.get('rule', {}).get('id', 'unknown')

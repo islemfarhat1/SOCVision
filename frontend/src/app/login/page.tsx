@@ -42,8 +42,8 @@ export default function LoginPage() {
         username: data.username || username,
       }));
       window.location.href = "/"; // Force reload to apply auth state
-    } catch (err: any) {
-      setError("Invalid credentials. Please check your username and password.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed.");
     } finally {
       setLoading(false);
     }

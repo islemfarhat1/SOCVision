@@ -28,7 +28,11 @@ export async function login(username: string, password: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error("Invalid credentials");
+  if (res.status === 429) {
+    const minutes = Math.ceil(Number(res.headers.get("Retry-After") ?? "900") / 60);
+    throw new Error(`Too many failed attempts. Try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`);
+  }
+  if (!res.ok) throw new Error("Invalid credentials. Please check your username and password.");
   return res.json();
 }
 
@@ -151,7 +155,10 @@ export async function generateIncidentReport(ticketId: string): Promise<Incident
     method: "POST",
     headers: getHeaders(),
   });
-  if (!res.ok) throw new Error("Failed to generate incident report");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? "Failed to generate the incident report. Please try again.");
+  }
   return res.json();
 }
 

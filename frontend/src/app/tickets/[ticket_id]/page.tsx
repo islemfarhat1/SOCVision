@@ -164,7 +164,7 @@ export default function TicketDetailPage() {
       setActiveTab("reports");
     } catch (err) {
       console.error(err);
-      setReportError("Failed to generate report with LLM. Please try again.");
+      setReportError(err instanceof Error ? err.message : "Failed to generate the incident report.");
     } finally {
       setGeneratingReport(false);
     }

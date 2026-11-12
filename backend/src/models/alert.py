@@ -80,4 +80,8 @@ class Alert:
 
     ticket_id: Optional[str] = None
 
+    # Traçabilité : modèle LLM qui a réellement produit l'analyse
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+
     status: Optional[str] = None

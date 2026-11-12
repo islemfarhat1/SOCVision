@@ -85,6 +85,11 @@ def generate_report(
     # Générer le rapport via le LLM
     llm = LLMService()
     report_content = llm.generate_incident_report(ticket_data, alert_data)
+    if not report_content:
+        raise HTTPException(
+            status_code=503,
+            detail="No LLM model is available to generate the report. Check Ollama and try again.",
+        )
     
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     generated_by = current_user.get("username", "System")

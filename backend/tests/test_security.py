@@ -1,0 +1,183 @@
+"""
+Tests du bloc sécurité : webhook Wazuh, anti brute-force du login,
+mot de passe des comptes de démo, traçabilité du modèle LLM.
+"""
+
+import os
+import sqlite3
+
+import bcrypt
+import pytest
+
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from config import settings  # noqa: E402
+from src.api.main import app  # noqa: E402
+from src.api.routers import auth  # noqa: E402
+from src.database.database_manager import DatabaseManager  # noqa: E402
+from src.llm.llm_service import LLMService, REPORT_SYSTEM_PROMPT  # noqa: E402
+from src.login_rate_limiter import LoginRateLimiter  # noqa: E402
+
+client = TestClient(app)
+WEBHOOK = "/api/alerts/wazuh/webhook"
+
+
+# ── Webhook Wazuh ────────────────────────────────────────────────────────────
+
+def test_webhook_disabled_when_no_token_configured(monkeypatch):
+    monkeypatch.setattr(settings, "WAZUH_WEBHOOK_TOKEN", "")
+    r = client.post(WEBHOOK, json={}, headers={"X-Webhook-Token": "anything"})
+    assert r.status_code == 503
+
+
+def test_webhook_rejects_missing_token(monkeypatch):
+    monkeypatch.setattr(settings, "WAZUH_WEBHOOK_TOKEN", "s3cret-token")
+    assert client.post(WEBHOOK, json={}).status_code == 401
+
+
+def test_webhook_rejects_wrong_token(monkeypatch):
+    monkeypatch.setattr(settings, "WAZUH_WEBHOOK_TOKEN", "s3cret-token")
+    r = client.post(WEBHOOK, json={}, headers={"X-Webhook-Token": "wrong"})
+    assert r.status_code == 401
+
+
+def test_webhook_accepts_valid_token(monkeypatch):
+    monkeypatch.setattr(settings, "WAZUH_WEBHOOK_TOKEN", "s3cret-token")
+    # Agent "noise" payload: passes auth, then gets filtered without hitting TI/LLM
+    import src.api.routers.alerts as alerts_router
+    monkeypatch.setattr(alerts_router, "is_noise", lambda payload: True)
+    r = client.post(WEBHOOK, json={"agent": {"name": "x"}}, headers={"X-Webhook-Token": "s3cret-token"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "skipped"
+
+
+# ── Rate limiter ─────────────────────────────────────────────────────────────
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+def test_limiter_blocks_after_max_failures_and_expires():
+    clock = FakeClock()
+    limiter = LoginRateLimiter(max_failures=3, window_seconds=60, clock=clock)
+    for _ in range(3):
+        assert limiter.retry_after("alice", "1.2.3.4") == 0
+        limiter.record_failure("alice", "1.2.3.4")
+    assert limiter.retry_after("alice", "1.2.3.4") > 0
+    # same user from another IP is still blocked (per-username counter)
+    assert limiter.retry_after("ALICE", "5.6.7.8") > 0
+    clock.now = 61
+    assert limiter.retry_after("alice", "1.2.3.4") == 0
+
+
+def test_limiter_blocks_ip_spraying_many_usernames():
+    limiter = LoginRateLimiter(max_failures=3, window_seconds=60, clock=FakeClock())
+    for name in ("a", "b", "c"):
+        limiter.record_failure(name, "9.9.9.9")
+    assert limiter.retry_after("d", "9.9.9.9") > 0
+
+
+def test_success_resets_user_counter():
+    limiter = LoginRateLimiter(max_failures=3, window_seconds=60, clock=FakeClock())
+    limiter.record_failure("bob", "1.1.1.1")
+    limiter.record_failure("bob", "2.2.2.2")
+    limiter.record_success("bob")
+    limiter.record_failure("bob", "3.3.3.3")
+    assert limiter.retry_after("bob", "4.4.4.4") == 0
+
+
+def test_login_endpoint_returns_429_with_retry_after(monkeypatch):
+    monkeypatch.setattr(auth, "login_limiter", LoginRateLimiter(2, 600))
+    monkeypatch.setattr(auth, "get_user_by_username", lambda u: None)
+    body = {"username": "nobody", "password": "x"}
+    assert client.post("/api/auth/login", json=body).status_code == 401
+    assert client.post("/api/auth/login", json=body).status_code == 401
+    r = client.post("/api/auth/login", json=body)
+    assert r.status_code == 429
+    assert int(r.headers["Retry-After"]) > 0
+
+
+# ── Comptes de démo ──────────────────────────────────────────────────────────
+
+def _seed_hash(tmp_path):
+    db_path = tmp_path / "soc.db"
+    DatabaseManager(db_path=str(db_path))
+    return sqlite3.connect(db_path).execute("SELECT password_hash FROM users LIMIT 1").fetchone()[0]
+
+
+def test_seed_never_uses_admin123(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(settings, "SEED_USER_PASSWORD", "")
+    h = _seed_hash(tmp_path)
+    assert not bcrypt.checkpw(b"admin123", h.encode())
+    assert "generated password" in capsys.readouterr().out
+
+
+def test_seed_uses_configured_password(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "SEED_USER_PASSWORD", "MyLabPassw0rd!")
+    h = _seed_hash(tmp_path)
+    assert bcrypt.checkpw(b"MyLabPassw0rd!", h.encode())
+
+
+# ── LLM : traçabilité et prompt du rapport ───────────────────────────────────
+
+class FakeLLMClient:
+    def __init__(self, response, provider, model):
+        self.response, self.provider, self.model = response, provider, model
+        self.calls = []
+
+    def generate(self, prompt, **kwargs):
+        self.calls.append(kwargs)
+        self.last_provider, self.last_model = self.provider, self.model
+        return self.response
+
+
+def test_report_uses_markdown_system_prompt_and_larger_budget():
+    service = LLMService()
+    service.client = FakeLLMClient("# Report", "ollama", "qwen2.5:1.5b")
+    assert service.generate_incident_report({"ticket_id": "INC-1"}, {}) == "# Report"
+    call = service.client.calls[0]
+    assert call["system_prompt"] == REPORT_SYSTEM_PROMPT
+    assert "JSON" in call["system_prompt"] and "Never answer in JSON" in call["system_prompt"]
+    assert call["max_tokens"] > 900
+
+
+def test_report_endpoint_returns_503_when_no_llm(monkeypatch):
+    from src.api.routers import tickets as tickets_router
+    import pandas as pd
+
+    monkeypatch.setattr(tickets_router.db, "get_tickets_dataframe",
+                        lambda: pd.DataFrame([{"ticket_id": "INC-1", "alert_id": "A-1"}]))
+    monkeypatch.setattr(tickets_router.db, "get_alerts_dataframe",
+                        lambda: pd.DataFrame([{"alert_id": "A-1"}]))
+    monkeypatch.setattr(LLMService, "generate_incident_report", lambda self, t, a: None)
+
+    from src.dependencies import get_current_user
+    app.dependency_overrides[get_current_user] = lambda: {"username": "l2", "role": "SOC_L2"}
+    try:
+        r = client.post("/api/tickets/INC-1/generate-report")
+    finally:
+        app.dependency_overrides.clear()
+    assert r.status_code == 503
+
+
+def test_analyze_records_the_model_that_answered():
+    from tests.test_ip_reputation_prompt import _make_alert, PRIVATE_REP
+
+    service = LLMService()
+    service.client = FakeLLMClient(None, None, None)
+    alert = service.analyze(_make_alert("192.168.1.5", PRIVATE_REP))
+    assert alert.llm_provider is None and alert.llm_model is None
+
+    service.client = FakeLLMClient(
+        '{"summary": "s", "reasoning": "r", "ioc_assessment": "i", '
+        '"mitre_context": "", "recommended_action": "a", "confidence": 0.9}',
+        "openrouter", "openai/gpt-4o-mini",
+    )
+    alert = service.analyze(_make_alert("192.168.1.5", PRIVATE_REP))
+    assert (alert.llm_provider, alert.llm_model) == ("openrouter", "openai/gpt-4o-mini")

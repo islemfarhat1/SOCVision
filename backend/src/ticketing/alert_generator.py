@@ -65,8 +65,8 @@ class AlertGenerator:
             "recommended_action": alert_obj.recommended_action,
             "confidence": alert_obj.confidence,
             "source": "wazuh" if alert_obj.event_type == "wazuh" else "cicids",
-            "llm_provider": "ollama",
-            "llm_model": "qwen2.5:7b",
+            "llm_provider": alert_obj.llm_provider or "none",
+            "llm_model": alert_obj.llm_model or "unavailable",
             "status": "NEW",
             "assigned_to": None,
         }

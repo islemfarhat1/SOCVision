@@ -1,6 +1,9 @@
+import hmac
 from typing import Annotated
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException
 from fastapi.security import OAuth2PasswordBearer
+
+from config import settings
 
 from src.security import decode_token
 
@@ -42,3 +45,16 @@ def require_role(*allowed_roles: str):
             raise HTTPException(status_code=403, detail="Not enough privileges")
         return current_user
     return role_dependency
+
+
+
+def verify_webhook_token(x_webhook_token: Annotated[str | None, Header()] = None) -> None:
+    """
+    Authentifie les appels du webhook Wazuh avec un secret partagé.
+    Refuse tout si aucun secret n'est configuré (fail closed).
+    """
+    expected = settings.WAZUH_WEBHOOK_TOKEN
+    if not expected:
+        raise HTTPException(status_code=503, detail="Webhook disabled: WAZUH_WEBHOOK_TOKEN is not configured")
+    if not x_webhook_token or not hmac.compare_digest(x_webhook_token, expected):
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
