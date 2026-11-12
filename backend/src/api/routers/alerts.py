@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Response
 from typing import Optional, Annotated
 from datetime import datetime
 import sqlite3
@@ -12,47 +12,83 @@ from src.utils.notifier import notify_n8n
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 db = DatabaseManager()
 
+ALERT_STATUSES = ("NEW", "UNDER_REVIEW", "ESCALATED", "DISMISSED")
+SEARCH_FIELDS = ("source_ip", "destination_ip", "incident_title", "alert_id", "attack_type")
+SORT_FIELDS = {"id", "score", "created_at"}
+
+ReadRoles = Annotated[dict, Depends(require_role("SOC_L1", "MANAGER", "ADMIN"))]
+
+
 def _clean(df):
     return df.astype(object).where(df.notnull(), None)
 
+
+def _filter_alerts(df, severity=None, attack_type=None, source=None, search=None):
+    """Filtres communs à la liste et aux compteurs (le statut est traité à part)."""
+    if severity:
+        df = df[df["severity"] == severity.upper()]
+    if attack_type:
+        df = df[df["attack_type"].str.contains(attack_type, case=False, na=False, regex=False)]
+    if source:
+        df = df[df["source"].str.lower() == source.lower()]
+    if search:
+        term = search.strip()
+        # regex=False : le texte saisi est cherché tel quel (pas d'expression régulière,
+        # donc pas d'erreur sur "(" ni de motif coûteux).
+        mask = False
+        for field in SEARCH_FIELDS:
+            mask = mask | df[field].astype(str).str.contains(term, case=False, na=False, regex=False)
+        df = df[mask]
+    return df
+
+
 @router.get("", response_model=list[AlertSchema])
 def get_alerts(
-    current_user: Annotated[dict, Depends(require_role("SOC_L1", "MANAGER", "ADMIN"))],
+    current_user: ReadRoles,
+    response: Response,
     severity: Optional[str] = None,
     attack_type: Optional[str] = None,
-    status: Optional[str] = None,
+    status: Optional[str] = Query(None, description="Un ou plusieurs statuts séparés par des virgules"),
     source: Optional[str] = Query(None, description="Filtrer par source : cicids ou wazuh"),
-    search: Optional[str] = Query(None, description="Recherche libre sur les IP"),
+    search: Optional[str] = Query(None, description="Recherche dans les IP, le titre, l'ID et le type d'attaque"),
     sort: str = Query("id", description="Champ de tri: id, score, created_at"),
     order: str = Query("desc", description="asc ou desc"),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
 ):
-    """Retourne la file des alertes SOC."""
-    df = db.get_alerts_dataframe()
+    """Retourne la file des alertes SOC. Le nombre total est dans l'en-tête X-Total-Count."""
+    df = _filter_alerts(db.get_alerts_dataframe(), severity, attack_type, source, search)
 
-    if severity:
-        df = df[df["severity"] == severity.upper()]
-    if attack_type:
-        df = df[df["attack_type"].str.contains(attack_type, case=False, na=False)]
     if status:
-        df = df[df["status"] == status.upper()]
-    if source:
-        df = df[df["source"].str.lower() == source.lower()]
-    if search:
-        df = df[
-            df["source_ip"].str.contains(search, na=False)
-            | df["destination_ip"].str.contains(search, na=False)
-        ]
+        statuses = [s.strip().upper() for s in status.split(",") if s.strip()]
+        df = df[df["status"].isin(statuses)]
 
-    if sort in df.columns:
-        df = df.sort_values(sort, ascending=(order == "asc"))
+    if sort in SORT_FIELDS:
+        ascending = order == "asc"
+        # "id" en second critère : ordre stable entre deux rafraîchissements
+        df = df.sort_values([sort, "id"], ascending=[ascending, ascending])
+
+    response.headers["X-Total-Count"] = str(len(df))
 
     start = (page - 1) * size
     df = df.iloc[start:start + size]
 
     df = _clean(df)
     return df.to_dict(orient="records")
+
+
+@router.get("/status-counts")
+def get_alert_status_counts(
+    current_user: ReadRoles,
+    severity: Optional[str] = None,
+    attack_type: Optional[str] = None,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    """Nombre d'alertes par statut, avec les mêmes filtres que la liste (pour les onglets)."""
+    df = _filter_alerts(db.get_alerts_dataframe(), severity, attack_type, source, search)
+    counts = df["status"].value_counts()
+    return {status: int(counts.get(status, 0)) for status in ALERT_STATUSES}
 
 
 @router.get("/{alert_id}", response_model=AlertSchema)

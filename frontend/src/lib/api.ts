@@ -65,6 +65,25 @@ export async function fetchAlerts(params?: Record<string, string>) {
   return res.json();
 }
 
+export type AlertStatusCounts = Record<"NEW" | "UNDER_REVIEW" | "ESCALATED" | "DISMISSED", number>;
+
+/** One page of the alert queue plus the total number of matching alerts. */
+export async function fetchAlertPage<T>(params: Record<string, string>): Promise<{ alerts: T[]; total: number }> {
+  const res = await fetch(`${API_BASE_URL}/alerts?${new URLSearchParams(params)}`, { headers: getHeaders() });
+  if (!res.ok) throw new Error("Failed to fetch alerts");
+  const alerts: T[] = await res.json();
+  const total = Number(res.headers.get("X-Total-Count") ?? alerts.length);
+  return { alerts, total };
+}
+
+export async function fetchAlertStatusCounts(params: Record<string, string>): Promise<AlertStatusCounts> {
+  const res = await fetch(`${API_BASE_URL}/alerts/status-counts?${new URLSearchParams(params)}`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch alert counts");
+  return res.json();
+}
+
 export async function fetchAlert(alertId: string) {
   const res = await fetch(`${API_BASE_URL}/alerts/${alertId}`, { headers: getHeaders() });
   if (!res.ok) throw new Error("Failed to fetch alert");
