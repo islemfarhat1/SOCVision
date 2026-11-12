@@ -5,13 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
-  ArrowLeft, Save, FileText, CheckCircle2,
-  ShieldOff, ShieldAlert, User, Clock,
-  Cpu, BrainCircuit, Target, Network, Zap
+  ArrowLeft, Save, CheckCircle2, ShieldOff, ShieldAlert,
+  ArrowUpRight, Play, ChevronDown, Sparkles,
 } from "lucide-react";
 import { fetchAlert, promoteAlert, dismissAlert, updateAlert, fetchAnalysts } from "@/lib/api";
 import { AuthGuard } from "@/components/auth-guard";
@@ -57,12 +54,31 @@ const SEVERITY_STYLES: Record<string, string> = {
   LOW: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
 };
 
+// Colour is reserved for severity; statuses stay neutral so they don't compete with it.
 const STATUS_STYLES: Record<string, string> = {
-  NEW: "bg-sky-500/15 text-sky-400 border-sky-500/30",
-  UNDER_REVIEW: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  ESCALATED: "bg-violet-500/15 text-violet-400 border-violet-500/30",
-  DISMISSED: "bg-slate-500/15 text-slate-400 border-slate-500/30",
+  NEW: "bg-foreground/10 text-foreground border-foreground/20",
+  UNDER_REVIEW: "bg-foreground/10 text-foreground border-foreground/20",
+  ESCALATED: "bg-muted text-muted-foreground border-border",
+  DISMISSED: "bg-muted text-muted-foreground border-border",
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  NEW: "New",
+  UNDER_REVIEW: "Under review",
+  ESCALATED: "Escalated",
+  DISMISSED: "Dismissed",
+};
+
+function splitList(raw: string | null): string[] {
+  if (!raw || raw === "None" || raw === "Not identified") return [];
+  return raw.split(",").map((t) => t.trim()).filter(Boolean);
+}
+
+function protocolName(protocol: number | null): string {
+  if (protocol === 6) return "TCP";
+  if (protocol === 17) return "UDP";
+  return protocol == null ? "—" : String(protocol);
+}
 
 export default function AlertDetailPage() {
   const params = useParams();
@@ -180,374 +196,250 @@ export default function AlertDetailPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
+  const techniques = alert ? splitList(alert.mitre) : [];
+  const tactics = alert ? splitList(alert.mitre_tactic) : [];
+  const notesEditable = !!alert && canAct && alert.status === "UNDER_REVIEW";
+
   return (
-    <AuthGuard allowedRoles={["SOC_L1", "ADMIN"]}>
+    <AuthGuard allowedRoles={["SOC_L1", "MANAGER", "ADMIN"]}>
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title={alert ? `${alert.alert_id} — ${alert.incident_title}` : "Alert Detail"} />
-        <main className="flex-1 overflow-y-auto p-6 space-y-4">
+        <Header title={alert ? alert.alert_id : "Alert"} />
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto p-6 space-y-5">
+            <Link
+              href="/alerts"
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Alert queue
+            </Link>
 
-          {/* Back link */}
-          <Link
-            href="/alerts"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground w-fit"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to alerts
-          </Link>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {!alert && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {!alert && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+            {successMsg && (
+              <div role="status" className="p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-sm text-emerald-300">
+                {successMsg}
+              </div>
+            )}
 
-          {/* Success banner */}
-          {successMsg && (
-            <div className="p-3 rounded-md bg-green-500/10 border border-green-500/30 text-sm text-green-400">
-              {successMsg}
-            </div>
-          )}
-
-          {alert && (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-
-              {/* ── Left column: Alert metadata + action buttons ── */}
-              <div className="lg:col-span-1 self-start sticky top-0 space-y-4">
-                <Card className="h-fit border-border/60 shadow-sm bg-card/80">
-                  <CardHeader className="pb-3 border-b border-border/40">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <ShieldAlert className="h-4 w-4 text-primary" /> Alert Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 text-sm pt-4">
-                    <InfoRow label="Alert ID" value={alert.alert_id} mono />
-                    <InfoRow label="Created At" value={new Date(alert.created_at).toLocaleString()} />
-
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Severity</span>
-                      <Badge variant="outline" className={SEVERITY_STYLES[alert.severity]}>
-                        {alert.severity}
-                      </Badge>
+            {alert && (
+              <>
+                {/* ── 1. Decision bar: what is it, how bad, what can I do ── */}
+                <section className="sticky top-0 z-10 -mx-6 px-6 py-4 bg-background/95 backdrop-blur border-b border-border">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="space-y-2 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={`text-xs font-semibold ${SEVERITY_STYLES[alert.severity] ?? ""}`}>
+                          {alert.severity}
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${STATUS_STYLES[alert.status] ?? ""}`}>
+                          {STATUS_LABELS[alert.status] ?? alert.status}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          Score <strong className="text-foreground font-semibold">{alert.score}</strong>/100
+                        </span>
+                      </div>
+                      <h1 className="text-xl font-semibold leading-tight">{alert.incident_title}</h1>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-mono text-foreground">{alert.source_ip}</span>
+                        {" → "}
+                        <span className="font-mono text-foreground">
+                          {alert.destination_ip}{alert.destination_port ? `:${alert.destination_port}` : ""}
+                        </span>
+                        {" · "}{alert.attack_type}
+                        {" · "}{new Date(alert.created_at).toLocaleString()}
+                      </p>
                     </div>
 
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Status</span>
-                      <Badge variant="outline" className={STATUS_STYLES[alert.status] ?? ""}>
-                        {alert.status.replace(/_/g, " ")}
-                      </Badge>
-                    </div>
-
-                    <InfoRow label="Attack Type" value={alert.attack_type} />
-                    <InfoRow label="Score" value={String(alert.score)} />
-                    <InfoRow label="Source" value={alert.source ?? "—"} />
-
-                    <Separator className="bg-border/40" />
-
-                    <InfoRow label="Source IP" value={alert.source_ip} mono />
-                    <InfoRow label="Source Port" value={alert.source_port?.toString() ?? "—"} mono />
-                    <InfoRow label="Destination IP" value={alert.destination_ip} mono />
-                    <InfoRow label="Dest. Port" value={alert.destination_port?.toString() ?? "—"} mono />
-                    <InfoRow
-                      label="Protocol"
-                      value={
-                        alert.protocol === 6 ? "TCP"
-                          : alert.protocol === 17 ? "UDP"
-                          : String(alert.protocol ?? "—")
-                      }
-                    />
-                    <InfoRow label="Frequency" value={alert.frequency_count?.toLocaleString() ?? "—"} />
-
-                    <Separator className="bg-border/40" />
-
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-muted-foreground">MITRE Tactics</span>
-                      {(() => {
-                        const rawTactic = alert.mitre_tactic;
-                        if (!rawTactic || rawTactic === "None" || rawTactic === "Not identified") {
-                          return <span className="text-right text-xs">None mapped</span>;
-                        }
-                        const tacticList = rawTactic.split(",").map((t: string) => t.trim()).filter(Boolean);
-                        return (
-                          <div className="flex flex-wrap gap-1.5 justify-end">
-                            {tacticList.map((tactic: string, idx: number) => (
-                              <Badge key={idx} variant="outline" className="text-[10px] bg-sky-500/10 text-sky-400 border-sky-500/25">
-                                {tactic}
-                              </Badge>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-muted-foreground">MITRE Techniques</span>
-                      {(() => {
-                        const rawTech = alert.mitre;
-                        if (!rawTech || rawTech === "None" || rawTech === "Not identified") {
-                          return <span className="text-right text-xs">None mapped</span>;
-                        }
-                        const techList = rawTech.split(",").map((t: string) => t.trim()).filter(Boolean);
-                        return (
-                          <div className="flex flex-wrap gap-1.5 justify-end">
-                            {techList.map((tech: string, idx: number) => (
-                              <Badge key={idx} variant="outline" className="font-mono text-[10px] bg-primary/10 text-primary border-primary/25">
-                                {tech}
-                              </Badge>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    <Separator className="bg-border/40" />
-
-                    <InfoRow label="LLM Provider" value={alert.llm_provider ?? "—"} />
-                    <InfoRow label="LLM Model" value={alert.llm_model ?? "—"} />
-
-                    {/* ── Triage actions (SOC L1 / ADMIN only) ── */}
-                    {canAct && (
-                      <>
-                        <Separator className="bg-border/40" />
-
-                        {/* NEW → Start triage */}
-                        {alert.status === "NEW" && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canAct && alert.status === "NEW" && (
+                        <button
+                          disabled={actionLoading}
+                          onClick={handleStartTriage}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          <Play className="h-4 w-4" />
+                          {actionLoading ? "Starting…" : "Start triage"}
+                        </button>
+                      )}
+                      {canAct && alert.status === "UNDER_REVIEW" && (
+                        <>
                           <button
                             disabled={actionLoading}
-                            onClick={handleStartTriage}
-                            className="w-full px-3 py-2 text-xs font-semibold rounded-md bg-sky-500/15 text-sky-400 border border-sky-500/30 hover:bg-sky-500/25 transition-colors disabled:opacity-50"
+                            onClick={() => setShowDismissModal(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted disabled:opacity-50"
                           >
-                            {actionLoading ? "…" : "▶ Start Triage"}
+                            <ShieldOff className="h-4 w-4" />
+                            Dismiss as false positive
                           </button>
-                        )}
+                          <button
+                            disabled={actionLoading}
+                            onClick={handleEscalateClick}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                          >
+                            <ArrowUpRight className="h-4 w-4" />
+                            {actionLoading ? "Loading…" : "Escalate to L2"}
+                          </button>
+                        </>
+                      )}
+                      {(alert.status === "ESCALATED" || alert.status === "DISMISSED") && (
+                        <div className="text-sm text-muted-foreground text-right">
+                          <p className="text-foreground font-medium">
+                            {alert.status === "ESCALATED"
+                              ? `Escalated${alert.assigned_to ? ` to ${alert.assigned_to}` : " to SOC L2"}`
+                              : "Dismissed as false positive"}
+                          </p>
+                          {alert.reviewed_by && (
+                            <p>
+                              by {alert.reviewed_by}
+                              {alert.reviewed_at && ` · ${new Date(alert.reviewed_at).toLocaleString()}`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
 
-                        {/* UNDER_REVIEW → Escalate or Dismiss */}
-                        {alert.status === "UNDER_REVIEW" && (
-                          <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                  {/* ── 2. AI analysis: what the analyst reads first ── */}
+                  <div className="lg:col-span-2 space-y-5">
+                    <section className="rounded-lg border border-border bg-card">
+                      <header className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-border">
+                        <h2 className="text-sm font-semibold flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          AI triage analysis
+                        </h2>
+                        <span className="text-xs text-muted-foreground">
+                          Suggestion — the decision stays with the analyst
+                        </span>
+                      </header>
+                      <div className="p-5 space-y-5">
+                        <p className="text-base leading-relaxed">{alert.summary}</p>
+
+                        <div className="rounded-md border-l-4 border-primary bg-primary/5 px-4 py-3">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-primary mb-1">
+                            Recommended action
+                          </h3>
+                          <p className="text-sm leading-relaxed">{alert.recommended_action}</p>
+                        </div>
+
+                        <AnalysisBlock title="Why this score">{alert.reasoning}</AnalysisBlock>
+                        <AnalysisBlock title="Threat intelligence">{alert.ioc_assessment}</AnalysisBlock>
+                        <IpReputationDisplay rawReputation={alert.ip_reputation} />
+                      </div>
+                    </section>
+                  </div>
+
+                  {/* ── 3. Side panel: notes, MITRE, technical details ── */}
+                  <aside className="space-y-5">
+                    <section className="rounded-lg border border-border bg-card">
+                      <header className="flex items-center justify-between px-4 py-3 border-b border-border">
+                        <h2 className="text-sm font-semibold">Analyst notes</h2>
+                        {notesSavedMsg && (
+                          <span className="text-xs text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+                          </span>
+                        )}
+                      </header>
+                      <div className="p-4 space-y-3">
+                        {notesEditable ? (
+                          <>
+                            <textarea
+                              value={notes}
+                              onChange={(e) => setNotes(e.target.value)}
+                              placeholder="Triage findings, context, instructions for L2…"
+                              rows={6}
+                              aria-label="Analyst notes"
+                              className="w-full text-sm p-3 rounded-md bg-background border border-border focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground resize-y"
+                            />
                             <button
-                              disabled={actionLoading}
-                              onClick={handleEscalateClick}
-                              className="w-full px-3 py-2 text-xs font-semibold rounded-md bg-violet-500/15 text-violet-400 border border-violet-500/30 hover:bg-violet-500/25 transition-colors disabled:opacity-50"
+                              onClick={handleSaveNotes}
+                              disabled={savingNotes}
+                              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted disabled:opacity-50"
                             >
-                              {actionLoading ? "…" : "⬆ Escalate to SOC L2"}
+                              <Save className="h-4 w-4" />
+                              {savingNotes ? "Saving…" : "Save notes"}
                             </button>
-                            <button
-                              disabled={actionLoading}
-                              onClick={() => setShowDismissModal(true)}
-                              className="w-full px-3 py-2 text-xs font-semibold rounded-md bg-slate-500/15 text-slate-400 border border-slate-500/30 hover:bg-slate-500/25 transition-colors disabled:opacity-50"
-                            >
-                              ✕ Dismiss (False Positive)
-                            </button>
+                          </>
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                            {alert.investigation_notes || (
+                              <span className="italic">
+                                {alert.status === "NEW" ? "Start triage to add notes." : "No notes recorded."}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+                      <h2 className="text-sm font-semibold">MITRE ATT&amp;CK</h2>
+                      {techniques.length === 0 && tactics.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No technique mapped by the engine.</p>
+                      ) : (
+                        <dl className="space-y-3 text-sm">
+                          {tactics.length > 0 && (
+                            <div>
+                              <dt className="text-xs text-muted-foreground mb-1">Tactics</dt>
+                              <dd className="flex flex-wrap gap-1.5">
+                                {tactics.map((t) => (
+                                  <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
+                                ))}
+                              </dd>
+                            </div>
+                          )}
+                          {techniques.length > 0 && (
+                            <div>
+                              <dt className="text-xs text-muted-foreground mb-1">Techniques</dt>
+                              <dd className="flex flex-wrap gap-1.5">
+                                {techniques.map((t) => (
+                                  <a
+                                    key={t}
+                                    href={`https://attack.mitre.org/techniques/${t.replace(".", "/")}/`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-mono text-xs px-2 py-0.5 rounded border border-border hover:border-primary hover:text-primary"
+                                  >
+                                    {t}
+                                  </a>
+                                ))}
+                              </dd>
+                            </div>
+                          )}
+                        </dl>
+                      )}
+                    </section>
+
+                    <details className="group rounded-lg border border-border bg-card">
+                      <summary className="flex items-center justify-between px-4 py-3 text-sm font-semibold cursor-pointer list-none">
+                        Technical details
+                        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                      </summary>
+                      <dl className="px-4 pb-4 space-y-2 text-sm">
+                        <InfoRow label="Alert ID" value={alert.alert_id} mono />
+                        <InfoRow label="Source" value={alert.source ?? "—"} />
+                        <InfoRow label="Source port" value={alert.source_port?.toString() ?? "—"} mono />
+                        <InfoRow label="Destination port" value={alert.destination_port?.toString() ?? "—"} mono />
+                        <InfoRow label="Protocol" value={protocolName(alert.protocol)} />
+                        <InfoRow label="Frequency" value={alert.frequency_count?.toLocaleString() ?? "—"} />
+                        <InfoRow label="LLM" value={[alert.llm_provider, alert.llm_model].filter(Boolean).join(" · ") || "—"} />
+                        {alert.mitre_context && (
+                          <div className="pt-2">
+                            <dt className="text-xs text-muted-foreground mb-1">AI note on MITRE mapping</dt>
+                            <dd className="text-muted-foreground">{alert.mitre_context}</dd>
                           </div>
                         )}
-                      </>
-                    )}
-
-                    {/* ── Post-decision metadata ── */}
-                    {(alert.status === "DISMISSED" || alert.status === "ESCALATED") && (
-                      <>
-                        <Separator className="bg-border/40" />
-                        <div className="space-y-2 text-xs">
-                          {alert.status === "DISMISSED" && (
-                            <div className="p-2.5 rounded bg-slate-500/10 border border-slate-500/20 space-y-1 text-slate-300">
-                              <div className="flex items-center gap-2 font-semibold text-slate-400">
-                                <ShieldOff className="h-4 w-4 shrink-0" />
-                                <span>Classification: False Positive</span>
-                              </div>
-                              {alert.reviewed_by && (
-                                <p className="text-[11px] text-muted-foreground">
-                                  Reviewed by: <span className="font-semibold text-foreground">{alert.reviewed_by}</span>
-                                </p>
-                              )}
-                              {alert.reviewed_at && (
-                                <p className="text-[11px] text-muted-foreground">
-                                  Reviewed at: <span className="font-mono text-foreground">{new Date(alert.reviewed_at).toLocaleString()}</span>
-                                </p>
-                              )}
-                            </div>
-                          )}
-
-                          {alert.status === "ESCALATED" && (
-                            <div className="p-2.5 rounded bg-violet-500/10 border border-violet-500/20 space-y-1.5 text-violet-300">
-                              <div className="flex items-center gap-2 font-semibold text-violet-400">
-                                <ShieldAlert className="h-4 w-4 shrink-0" />
-                                <span>Escalated to: SOC L2</span>
-                              </div>
-                              <div className="space-y-1 text-[11px] pt-0.5">
-                                <div>
-                                  <span className="text-muted-foreground">Assigned to: </span>
-                                  <strong className="text-foreground">{alert.assigned_to || "Unassigned"}</strong>
-                                </div>
-                                {alert.assigned_to && (
-                                  <div>
-                                    <span className="text-muted-foreground">Username: </span>
-                                    <span className="font-mono text-violet-300 font-semibold">{alert.assigned_to}</span>
-                                  </div>
-                                )}
-                                {alert.reviewed_by && (
-                                  <div>
-                                    <span className="text-muted-foreground">Escalated by: </span>
-                                    <strong className="text-foreground">{alert.reviewed_by}</strong>
-                                  </div>
-                                )}
-                                {alert.reviewed_at && (
-                                  <div>
-                                    <span className="text-muted-foreground">Reviewed at: </span>
-                                    <span className="font-mono text-foreground">{new Date(alert.reviewed_at).toLocaleString()}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* ── Right column: Investigation Workspace ── */}
-              <div className="lg:col-span-3 flex flex-col gap-4">
-
-                {/* Unified AI Analysis Report */}
-                <Card className="bg-card/80 border-border/60 overflow-hidden shadow-sm">
-                  <CardHeader className="bg-muted/10 border-b border-border/40 pb-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Cpu className="h-5 w-5 text-primary" />
-                          AI Triage Report
-                        </CardTitle>
-                        <p className="text-xs text-muted-foreground mt-1">Automated analysis and context for investigation</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    {/* Summary Area */}
-                    <div className="p-5 border-b border-border/40 bg-background/40">
-                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5" /> Executive Summary
-                      </h4>
-                      <p className="text-sm leading-relaxed text-foreground">{alert.summary}</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40">
-                      {/* Score & Reasoning */}
-                      <div className="p-5 space-y-3">
-                         <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                           <BrainCircuit className="h-3.5 w-3.5" /> Scoring Reasoning
-                         </h4>
-                         <p className="text-sm leading-relaxed text-muted-foreground">{alert.reasoning}</p>
-                      </div>
-                      
-                      {/* IOC Assessment & IP Reputation */}
-                      <div className="p-5 space-y-3">
-                         <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                           <Target className="h-3.5 w-3.5" /> Threat Intelligence & Reputation
-                         </h4>
-                         <p className="text-sm leading-relaxed text-muted-foreground">{alert.ioc_assessment}</p>
-                         <IpReputationDisplay rawReputation={alert.ip_reputation} />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40 border-t border-border/40">
-                      {/* MITRE */}
-                       <div className="p-5 space-y-3 bg-muted/5">
-                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <Network className="h-3.5 w-3.5" /> MITRE ATT&CK
-                          </h4>
-                          {(() => {
-                            const ctx = alert.mitre_context ?? "";
-                            const hasTechnique = !!(alert.mitre && alert.mitre !== "None" && alert.mitre !== "Not identified");
-                            const FALLBACK_MARKERS = [
-                              "no mitre att&ck mapping",
-                              "no att&ck mapping",
-                              "aucune technique mitre",
-                              "mappee par le moteur",
-                              "not mapped",
-                            ];
-                            const isFallbackText = FALLBACK_MARKERS.some(m => ctx.toLowerCase().includes(m));
-                            // If context is missing or contains fallback text but we have a known technique,
-                            // auto-generate a clean description instead.
-                            if (hasTechnique && (!ctx || isFallbackText)) {
-                              const techs = alert.mitre!.split(",").map((t: string) => t.trim()).filter(Boolean);
-                              const tactics = (alert.mitre_tactic ?? "").split(",").map((t: string) => t.trim()).filter(Boolean);
-                              const parts = techs.map((tech: string, i: number) =>
-                                tactics[i] ? `${tech} (${tactics[i]})` : tech
-                              );
-                              return (
-                                <p className="text-sm leading-relaxed text-muted-foreground">
-                                  This alert maps to MITRE ATT&amp;CK: {parts.join(", ")}.
-                                </p>
-                              );
-                            }
-                            return (
-                              <p className="text-sm leading-relaxed text-muted-foreground">
-                                {ctx || "No MITRE ATT\u0026CK mapping has been determined for this alert."}
-                              </p>
-                            );
-                          })()}
-                       </div>
-                      
-                      {/* Recommended Action */}
-                      <div className="p-5 space-y-3 bg-emerald-500/5">
-                         <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-500 flex items-center gap-1.5">
-                           <Zap className="h-3.5 w-3.5" /> Recommended Action
-                         </h4>
-                         <p className="text-sm leading-relaxed text-emerald-400/90">{alert.recommended_action}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Investigation Notes */}
-                <Card className="border-primary/30 bg-card/90 shadow-lg shadow-primary/5">
-                  <CardHeader className="pb-3 border-b border-border/40">
-                    <CardTitle className="text-base flex items-center justify-between">
-                      <span className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-primary" />
-                        Analyst Investigation Notes
-                      </span>
-                      {notesSavedMsg && (
-                        <span className="text-xs text-emerald-400 flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Saved!
-                        </span>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4 space-y-3">
-                    {/* Editable only when UNDER_REVIEW */}
-                    {canAct && alert.status === "UNDER_REVIEW" ? (
-                      <>
-                        <textarea
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                          placeholder="Log your triage findings, context, or instructions for the L2 team here before making a decision…"
-                          rows={5}
-                          className="w-full text-sm p-3 rounded-md bg-background/60 border border-border/80 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/60 resize-y"
-                        />
-                        <div className="flex justify-end pt-1">
-                          <button
-                            onClick={handleSaveNotes}
-                            disabled={savingNotes}
-                            className="px-4 py-2 text-xs font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                          >
-                            <Save className="h-3.5 w-3.5" />
-                            {savingNotes ? "Saving…" : "Save Notes"}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-sm p-4 rounded-md bg-background/40 border border-border/50 min-h-[100px] whitespace-pre-wrap text-muted-foreground">
-                        {alert.investigation_notes
-                          ? alert.investigation_notes
-                          : <span className="italic opacity-60">No investigation notes recorded for this alert.</span>
-                        }
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-              </div>
-            </div>
-          )}
+                      </dl>
+                    </details>
+                  </aside>
+                </div>
+              </>
+            )}
+          </div>
         </main>
       </div>
 
@@ -588,8 +480,8 @@ export default function AlertDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-lg shadow-2xl max-w-md w-full mx-4 p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-purple-500/10 border border-purple-500/20">
-                <ShieldAlert className="h-5 w-5 text-purple-400" />
+              <div className="p-2 rounded-full bg-primary/10 border border-primary/20">
+                <ShieldAlert className="h-5 w-5 text-primary" />
               </div>
               <h2 className="text-lg font-semibold">Escalate to SOC L2</h2>
             </div>
@@ -626,9 +518,9 @@ export default function AlertDetailPage() {
               <button
                 onClick={handleConfirmEscalate}
                 disabled={l2Analysts.length === 0 || !selectedL2}
-                className="px-4 py-2 text-sm font-semibold rounded-md bg-purple-600 hover:bg-purple-700 text-white transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm font-semibold rounded-md bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-50"
               >
-                ⬆ Confirm Escalation
+                Confirm escalation
               </button>
             </div>
           </div>
@@ -638,13 +530,23 @@ export default function AlertDetailPage() {
   );
 }
 
-// ── Helper ───────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex justify-between items-start gap-2">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className={`text-right break-all ${mono ? "font-mono text-xs" : ""}`}>{value}</span>
+    <div className="flex justify-between items-start gap-3">
+      <dt className="text-muted-foreground shrink-0">{label}</dt>
+      <dd className={`text-right break-all ${mono ? "font-mono" : ""}`}>{value}</dd>
+    </div>
+  );
+}
+
+function AnalysisBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  if (!children) return null;
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{title}</h3>
+      <p className="text-sm leading-relaxed text-foreground/85">{children}</p>
     </div>
   );
 }
