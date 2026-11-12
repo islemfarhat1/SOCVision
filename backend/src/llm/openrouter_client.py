@@ -13,11 +13,13 @@ class OpenRouterClient:
         )
         self.local_models = ["qwen2.5:1.5b", "qwen2.5:7b"]
 
+        # Client cloud créé seulement si une clé est configurée
+        # (OpenAI() lève une erreur sans clé, ce qui cassait LLMService()).
         self.remote_client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=OPENROUTER_API_KEY,
             timeout=15.0
-        )
+        ) if OPENROUTER_API_KEY else None
         self.remote_models = OPENROUTER_MODELS
 
     def generate(self, prompt):
@@ -46,7 +48,7 @@ class OpenRouterClient:
                     print(f"[LLM LOCAL] Erreur avec {model}: {e}")
 
         # 2. Secours vers OpenRouter (Cloud)
-        for model in self.remote_models:
+        for model in (self.remote_models if self.remote_client else []):
             try:
                 response = self.remote_client.chat.completions.create(
                     model=model,

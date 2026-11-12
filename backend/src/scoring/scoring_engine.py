@@ -120,6 +120,10 @@ class ScoringEngine:
         elif reputation_value == "suspicious":
             return 10
 
+        # "clean", "not_checked" (TI indisponible) et IP privée : aucun point.
+        # Un lookup en échec n'ajoute rien, mais n'est jamais traité comme "clean"
+        # ailleurs dans le pipeline (prompt LLM, affichage).
+
         else:
             return 0
 

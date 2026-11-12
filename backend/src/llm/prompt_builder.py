@@ -118,6 +118,10 @@ STRICT RULES
     was not evaluated by external reputation services. The alert remains
     critical based on the detected attack activity, frequency, and other
     available security indicators."
+  * If Assessment Status is NOT_CHECKED (external lookups failed):
+    You MUST state that the reputation of the IP could not be verified
+    because the threat-intelligence services did not answer.
+    You MUST NOT claim the IP is clean, safe, or low risk.
   * If Assessment Status is UNKNOWN (no data available):
     You MUST state that no reputation information was available for this IP.
     You MUST NOT claim the IP is clean, safe, or unverified-clean.
@@ -182,8 +186,8 @@ If MITRE Technique says "NONE MAPPED", mention NO tactic or technique at all.
 If MITRE Technique gives a real value, you MUST mention it explicitly.
 Do not requalify the risk level.
 Assessment Status for source IP is: {assessment_status}
-If Assessment Status is NOT_APPLICABLE, do NOT claim any VirusTotal or
-AbuseIPDB result — the IP was never checked by those services.
+If Assessment Status is NOT_APPLICABLE or NOT_CHECKED,
+do NOT claim any VirusTotal or AbuseIPDB result — no result was obtained from those services.
 
 ========================
 RETURN ONLY VALID JSON
@@ -210,19 +214,30 @@ RETURN ONLY VALID JSON
         """
         Classify the reputation dict produced by ReputationChecker into one of:
           NOT_APPLICABLE  – private / loopback / link-local IP (never checked)
+          NOT_CHECKED     – external lookups were attempted but none succeeded
           UNKNOWN         – no data at all (rep is None or empty sources)
-          ASSESSED        – external services were actually queried
+          ASSESSED        – at least one external service actually answered
         """
-        if rep is None:
+        if not rep:
             return "UNKNOWN"
         sources = rep.get("sources", {})
         # ReputationChecker explicitly sets this sentinel for private IPs
         if sources.get("External reputation") == "Not applicable":
             return "NOT_APPLICABLE"
-        # VirusTotal / AbuseIPDB keys are only present when a real query ran
-        if "VirusTotal" in sources or "AbuseIPDB" in sources:
+        if rep.get("assessment_status") == "not_checked":
+            return "NOT_CHECKED"
+        external = [sources.get(k) for k in ("VirusTotal", "AbuseIPDB") if k in sources]
+        if not external:
+            return "UNKNOWN"
+        # A source counts only if it really answered (failed lookups are
+        # None in old records, or carry status "not_checked" in new ones).
+        if any(self._source_answered(src) for src in external):
             return "ASSESSED"
-        return "UNKNOWN"
+        return "NOT_CHECKED"
+
+    @staticmethod
+    def _source_answered(src) -> bool:
+        return isinstance(src, dict) and src.get("status", "ok") == "ok"
 
     def _build_reputation_context(self, source_ip: str, rep: dict | None) -> str:
         """
@@ -237,6 +252,15 @@ RETURN ONLY VALID JSON
                 f"Source IP {source_ip} is a private/internal address.\n"
                 f"External reputation checks (VirusTotal, AbuseIPDB) were NOT performed.\n"
                 f"No external reputation data is available for this IP."
+            )
+
+        if status == "NOT_CHECKED":
+            return (
+                f"Assessment Status: NOT_CHECKED\n"
+                f"External reputation lookups for source IP {source_ip} FAILED "
+                f"(service unavailable, timeout or quota).\n"
+                f"The reputation of this IP is NOT KNOWN. It must NOT be described "
+                f"as clean, safe or low risk."
             )
 
         if status == "UNKNOWN":
@@ -254,25 +278,34 @@ RETURN ONLY VALID JSON
         vt = sources.get("VirusTotal")
         abuse = sources.get("AbuseIPDB")
 
-        vt_summary = "N/A"
-        if isinstance(vt, dict):
+        not_checked = "NOT CHECKED (lookup failed - no data, NOT clean)"
+        vt_summary = not_checked
+        if self._source_answered(vt):
             vt_summary = (
                 f"malicious={vt.get('malicious', 0)}, "
                 f"suspicious={vt.get('suspicious', 0)}, "
                 f"harmless={vt.get('harmless', 0)}"
             )
 
-        abuse_summary = "N/A"
-        if isinstance(abuse, dict):
+        abuse_summary = not_checked
+        if self._source_answered(abuse):
             abuse_summary = (
                 f"abuseConfidenceScore={abuse.get('abuseConfidenceScore', 'N/A')}, "
                 f"totalReports={abuse.get('totalReports', 'N/A')}"
+            )
+
+        partial_note = ""
+        if not (self._source_answered(vt) and self._source_answered(abuse)):
+            partial_note = (
+                "Note: this assessment is PARTIAL - only the services listed with "
+                "data answered. Do not mention results for a service marked NOT CHECKED.\n"
             )
 
         return (
             f"Assessment Status: ASSESSED\n"
             f"Source IP {source_ip} was checked by external reputation services.\n"
             f"Aggregated Reputation: {reputation_label} (score={rep_score})\n"
+            f"{partial_note}"
             f"VirusTotal: {vt_summary}\n"
             f"AbuseIPDB: {abuse_summary}"
         )

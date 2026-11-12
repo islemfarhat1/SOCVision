@@ -3,7 +3,13 @@
 import { Badge } from "@/components/ui/badge";
 import { ShieldCheck, ShieldAlert, ShieldX, HelpCircle, Server } from "lucide-react";
 
-type VirusTotalData = {
+type SourceMeta = {
+  status?: "ok" | "not_checked";
+  checked_at?: string;
+  error?: string;
+};
+
+type VirusTotalData = SourceMeta & {
   malicious?: number;
   suspicious?: number;
   harmless?: number;
@@ -11,7 +17,9 @@ type VirusTotalData = {
   [key: string]: any;
 };
 
-type AbuseIPDBData = {
+type AbuseIPDBData = SourceMeta & {
+  abuseConfidenceScore?: number | string;
+  totalReports?: number | string;
   confidence?: number | string;
   confidence_score?: number | string;
   abuse_confidence_score?: number | string;
@@ -22,7 +30,9 @@ type AbuseIPDBData = {
 
 type ParsedReputation = {
   reputation?: string;
-  score?: number;
+  score?: number | null;
+  assessment_status?: "not_applicable" | "complete" | "partial" | "not_checked";
+  checked_at?: string;
   sources?: {
     VirusTotal?: VirusTotalData;
     AbuseIPDB?: AbuseIPDBData;
@@ -94,13 +104,26 @@ export function IpReputationDisplay({ rawReputation }: { rawReputation: string |
     );
   }
 
-  const repStatus = (parsed.reputation || "UNKNOWN").toUpperCase();
-  const vt = parsed.sources?.VirusTotal || parsed.sources?.virustotal;
-  const abuse = parsed.sources?.AbuseIPDB || parsed.sources?.abuseipdb;
+  const sources = parsed.sources ?? {};
+  const vt: VirusTotalData | null = sources.VirusTotal ?? sources.virustotal ?? null;
+  const abuse: AbuseIPDBData | null = sources.AbuseIPDB ?? sources.abuseipdb ?? null;
 
-  const isClean = repStatus === "CLEAN";
-  const isMalicious = repStatus === "MALICIOUS";
-  const isSuspicious = repStatus === "SUSPICIOUS";
+  // A source that was queried but did not answer stays "not checked".
+  // Older records store a failed lookup as null — treat it the same way.
+  const vtFailed = "VirusTotal" in sources && (!vt || vt.status === "not_checked");
+  const abuseFailed = "AbuseIPDB" in sources && (!abuse || abuse.status === "not_checked");
+  const isNotChecked =
+    parsed.assessment_status === "not_checked" ||
+    (parsed.assessment_status === undefined && vtFailed && abuseFailed);
+  const isPartial = !isNotChecked && (parsed.assessment_status === "partial" || vtFailed || abuseFailed);
+
+  const repStatus = isNotChecked
+    ? "NOT CHECKED"
+    : (parsed.reputation || "UNKNOWN").toUpperCase() + (isPartial ? " (PARTIAL)" : "");
+
+  const isClean = repStatus.startsWith("CLEAN");
+  const isMalicious = repStatus.startsWith("MALICIOUS");
+  const isSuspicious = repStatus.startsWith("SUSPICIOUS");
   const isInternal = repStatus.includes("INTERNAL") || repStatus.includes("PRIVATE");
 
   return (
@@ -115,6 +138,8 @@ export function IpReputationDisplay({ rawReputation }: { rawReputation: string |
           className={
             isInternal
               ? "bg-slate-500/15 text-slate-400 border-slate-500/30 font-bold px-2.5 py-0.5"
+              : isNotChecked
+              ? "bg-amber-500/15 text-amber-400 border-amber-500/30 font-bold px-2.5 py-0.5"
               : isClean
               ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-bold px-2.5 py-0.5"
               : isMalicious
@@ -127,6 +152,18 @@ export function IpReputationDisplay({ rawReputation }: { rawReputation: string |
           ● {repStatus}
         </Badge>
       </div>
+
+      {isNotChecked && (
+        <p className="text-xs text-amber-400">
+          Threat-intelligence services did not answer. This IP has not been verified and must not be
+          considered clean.
+        </p>
+      )}
+      {isPartial && (
+        <p className="text-xs text-muted-foreground">
+          Partial assessment: the reputation is based only on the sources that answered.
+        </p>
+      )}
 
       {/* Sources Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
@@ -141,8 +178,11 @@ export function IpReputationDisplay({ rawReputation }: { rawReputation: string |
           </div>
         )}
 
+        {!isInternal && vtFailed && <NotCheckedSource name="VirusTotal" source={vt} />}
+        {!isInternal && abuseFailed && <NotCheckedSource name="AbuseIPDB" source={abuse} />}
+
         {/* VirusTotal Section */}
-        {!isInternal && vt && (
+        {!isInternal && vt && !vtFailed && (
           <div className="p-2.5 rounded border border-border/40 bg-card/60 space-y-2">
             <div className="flex items-center justify-between font-semibold text-foreground border-b border-border/30 pb-1">
               <span>VirusTotal</span>
@@ -170,11 +210,12 @@ export function IpReputationDisplay({ rawReputation }: { rawReputation: string |
                 <span className="text-muted-foreground">{vt.undetected ?? 0}</span>
               </div>
             </div>
+            <CheckedAt value={vt.checked_at} />
           </div>
         )}
 
         {/* AbuseIPDB Section */}
-        {!isInternal && abuse && (
+        {!isInternal && abuse && !abuseFailed && (
           <div className="p-2.5 rounded border border-border/40 bg-card/60 space-y-2">
             <div className="flex items-center justify-between font-semibold text-foreground border-b border-border/30 pb-1">
               <span>AbuseIPDB</span>
@@ -184,19 +225,42 @@ export function IpReputationDisplay({ rawReputation }: { rawReputation: string |
               <div className="flex justify-between">
                 <span className="text-muted-foreground font-sans">Confidence</span>
                 <span className="text-foreground font-semibold">
-                  {abuse.confidence ?? abuse.confidence_score ?? abuse.abuse_confidence_score ?? 0}%
+                  {abuse.abuseConfidenceScore ?? abuse.confidence ?? abuse.confidence_score ?? abuse.abuse_confidence_score ?? 0}%
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground font-sans">Reports</span>
                 <span className="text-foreground">
-                  {abuse.reports ?? abuse.total_reports ?? 0}
+                  {abuse.totalReports ?? abuse.reports ?? abuse.total_reports ?? 0}
                 </span>
               </div>
             </div>
+            <CheckedAt value={abuse.checked_at} />
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function CheckedAt({ value }: { value?: string }) {
+  if (!value) return null;
+  return (
+    <p className="text-[11px] text-muted-foreground">Checked {new Date(value).toLocaleString()}</p>
+  );
+}
+
+function NotCheckedSource({ name, source }: { name: string; source: SourceMeta | null }) {
+  return (
+    <div className="p-2.5 rounded border border-amber-500/30 bg-amber-500/5 space-y-1.5">
+      <div className="flex items-center justify-between font-semibold text-foreground border-b border-border/30 pb-1">
+        <span>{name}</span>
+        <span className="text-[11px] font-semibold text-amber-400">NOT CHECKED</span>
+      </div>
+      <p className="text-muted-foreground">
+        Lookup failed{source?.error ? ` (${source.error})` : ""}. No data — not a clean result.
+      </p>
+      <CheckedAt value={source?.checked_at} />
     </div>
   );
 }

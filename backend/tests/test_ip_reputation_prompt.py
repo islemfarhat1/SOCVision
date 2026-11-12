@@ -230,3 +230,34 @@ class TestLLMServiceValidation:
         validated = self.service._validate(raw_result, alert)
         assert "flagged with malicious score 75" in validated["ioc_assessment"]
 
+
+
+# ── Tests: validator when TI lookups failed ──────────────────────────────────
+
+NOT_CHECKED_REP = {
+    "reputation": "not_checked",
+    "score": None,
+    "assessment_status": "not_checked",
+    "sources": {
+        "VirusTotal": {"engine": "VirusTotal", "status": "not_checked", "error": "HTTP 429"},
+        "AbuseIPDB": {"engine": "AbuseIPDB", "status": "not_checked", "error": "Timeout"},
+    },
+}
+
+
+class TestValidateNotChecked:
+
+    def setup_method(self):
+        self.service = LLMService()
+
+    def test_clean_claim_replaced_when_lookups_failed(self):
+        alert = _make_alert("8.8.8.8", NOT_CHECKED_REP)
+        result = {
+            "summary": "DDoS detected.",
+            "ioc_assessment": "The IP is clean according to VirusTotal.",
+            "recommended_action": "Block the source IP.",
+            "confidence": 0.9,
+        }
+        validated = self.service._validate(result, alert)
+        assert "could not be verified" in validated["ioc_assessment"]
+        assert "clean according" not in validated["ioc_assessment"]

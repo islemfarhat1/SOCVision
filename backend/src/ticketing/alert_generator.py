@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 import uuid
 
@@ -56,7 +57,7 @@ class AlertGenerator:
             "frequency_count": alert_obj.frequency_count,
             "mitre_tactic": alert_obj.mitre_tactic,
             "mitre": alert_obj.mitre_technique,
-            "ip_reputation": str(alert_obj.ip_reputation) if alert_obj.ip_reputation else None,
+            "ip_reputation": json.dumps(alert_obj.ip_reputation) if alert_obj.ip_reputation else None,
             "summary": alert_obj.summary,
             "reasoning": alert_obj.reasoning,
             "ioc_assessment": alert_obj.ioc_assessment,

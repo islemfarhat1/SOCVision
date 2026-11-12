@@ -95,7 +95,18 @@ class LLMService:
 
         rep = getattr(alert, "ip_reputation", None) or {}
         sources = rep.get("sources", {})
-        if is_private_ip or sources.get("External reputation") == "Not applicable":
+        rep_status = self.prompt_builder._get_assessment_status(rep or None)
+        clean_claims = ["clean", "safe", "benign", "no malicious", "not malicious", "good reputation"]
+
+        if rep_status == "NOT_CHECKED" and not is_private_ip:
+            # Lookup TI en échec : le LLM ne doit pas conclure que l'IP est propre.
+            if not ioc_assessment or any(p in ioc_assessment.lower() for p in clean_claims):
+                ioc_assessment = (
+                    "The reputation of the source IP could not be verified: the external "
+                    "threat-intelligence services (VirusTotal, AbuseIPDB) did not answer. "
+                    "The IP must not be considered clean; re-check its reputation manually."
+                )
+        elif is_private_ip or sources.get("External reputation") == "Not applicable":
             hallucination_phrases = ["clean according to", "clean on virustotal", "clean in abuseipdb", "virustotal and abuseipdb", "reputation is clean"]
             if any(p in ioc_assessment.lower() for p in hallucination_phrases) or not ioc_assessment:
                 ioc_assessment = (

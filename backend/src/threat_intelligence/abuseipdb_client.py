@@ -11,6 +11,12 @@ class AbuseIPDBClient:
     BASE_URL = "https://api.abuseipdb.com/api/v2/check"
 
     def check_ip(self, ip):
+        """Retourne les données, ou None en cas d'échec (raison dans self.last_error)."""
+        self.last_error = None
+
+        if not ABUSEIPDB_API_KEY:
+            self.last_error = "API key not configured"
+            return None
 
         headers = {
             "Key": ABUSEIPDB_API_KEY,
@@ -32,7 +38,7 @@ class AbuseIPDBClient:
             )
 
             if response.status_code != 200:
-                print("AbuseIPDB Error:", response.status_code)
+                self.last_error = f"HTTP {response.status_code}"
                 return None
 
             data = response.json()["data"]
@@ -60,6 +66,6 @@ class AbuseIPDBClient:
 
         except Exception as e:
 
-            print("AbuseIPDB Exception:", e)
+            self.last_error = f"{type(e).__name__}: {e}"
 
             return None
