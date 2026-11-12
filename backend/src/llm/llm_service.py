@@ -11,6 +11,23 @@ REPORT_SYSTEM_PROMPT = (
 REPORT_MAX_TOKENS = 2500
 from src.llm.response_parser import ResponseParser
 
+_FENCE = re.compile(r"^\s*```[a-zA-Z]*[ \t]*\n(.*?)\n?```\s*$", re.DOTALL)
+_OPEN_FENCE = re.compile(r"^\s*```(?:markdown|md)?[ \t]*\n", re.IGNORECASE)
+
+
+def strip_code_fence(text: str | None) -> str | None:
+    """
+    Les modèles entourent souvent le rapport de ```markdown ... ```, ce qui le
+    ferait afficher comme un bloc de code. On retire cette enveloppe (même si
+    la fermeture manque parce que la réponse a été tronquée).
+    """
+    if not text:
+        return text
+    match = _FENCE.match(text)
+    if match:
+        return match.group(1).strip()
+    return _OPEN_FENCE.sub("", text, count=1).strip()
+
 MITRE_PATTERN = re.compile(r"T\d{4}(\.\d{3})?")
 
 
@@ -175,4 +192,4 @@ class LLMService:
         print(response)
         print("======================================\n")
 
-        return response
+        return strip_code_fence(response)

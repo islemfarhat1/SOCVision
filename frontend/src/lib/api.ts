@@ -164,7 +164,11 @@ export async function updateTicket(ticketId: string, updates: { status?: string;
     headers: getHeaders(),
     body: JSON.stringify(updates),
   });
-  if (!res.ok) throw new Error("Failed to update ticket");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = typeof body?.detail === "string" ? body.detail : null;
+    throw new Error(detail ?? "The change could not be saved.");
+  }
   return res.json();
 }
 

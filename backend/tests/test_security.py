@@ -282,3 +282,16 @@ def test_ticket_rejects_unknown_status_and_non_l2_assignee(ticket_api):
     assert client.patch("/api/tickets/INC-1", json={"assigned_to": "ghost"}).status_code == 400
     assert client.patch("/api/tickets/INC-1", json={"assigned_to": "l2.bob"}).status_code == 200
     assert updates == [{"assigned_to": "l2.bob"}]
+
+
+def test_report_code_fence_is_stripped():
+    from src.llm.llm_service import strip_code_fence
+
+    fence = "`" * 3
+    assert strip_code_fence(f"{fence}markdown\n# Report\n\nBody\n{fence}") == "# Report\n\nBody"
+    # truncated answer: opening fence without the closing one
+    assert strip_code_fence(f"{fence}markdown\n# Report\nBody") == "# Report\nBody"
+    # code blocks inside a normal report are kept
+    inner = f"# Report\n\n{fence}\nlog line\n{fence}\nEnd"
+    assert strip_code_fence(inner) == inner
+    assert strip_code_fence(None) is None
