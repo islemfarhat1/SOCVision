@@ -11,6 +11,7 @@ from pathlib import Path
 
 from src.models.network_flow import NetworkFlow
 from src.models.alert import Alert
+from src.utils.net import safe_ip
 
 
 def load_normalized_alerts(normalized_dir: str) -> list[dict]:
@@ -30,8 +31,9 @@ def normalized_to_alert(normalized: dict, counter: int) -> Alert:
 
     flow = NetworkFlow(
         flow_id=f"WAZUH-{normalized.get('rule_id', counter)}-{counter}",
-        source_ip=normalized.get("src_ip", "unknown"),
-        destination_ip=normalized.get("dst_ip", "unknown"),
+        # IP issues des logs = contrôlables par l'attaquant : on n'accepte que des IP valides
+        source_ip=safe_ip(normalized.get("src_ip")) or "unknown",
+        destination_ip=safe_ip(normalized.get("dst_ip")) or "unknown",
         source_port=int(normalized.get("src_port", 0) or 0),
         destination_port=int(normalized.get("dst_port", 0) or 0),
         protocol=6,

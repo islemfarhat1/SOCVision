@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -97,7 +97,7 @@ class PromoteAlertSchema(BaseModel):
 class TicketUpdateSchema(BaseModel):
     status: Optional[str] = None
     assigned_to: Optional[str] = None
-    comments: Optional[str] = None
+    comments: Optional[str] = Field(default=None, max_length=10000)
 
 class IncidentReportSchema(BaseModel):
     id: int

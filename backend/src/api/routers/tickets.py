@@ -1,6 +1,8 @@
+import sqlite3
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Annotated
 
+from config.settings import DATABASE_PATH
 from src.database.database_manager import DatabaseManager
 from src.api.models import TicketSchema, TicketUpdateSchema
 from src.dependencies import get_current_user, require_role
@@ -8,8 +10,30 @@ from src.dependencies import get_current_user, require_role
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 db = DatabaseManager()
 
+TICKET_STATUSES = {"OPEN", "IN_PROGRESS", "CLOSED"}
+
+
 def _clean(df):
     return df.astype(object).where(df.notnull(), None)
+
+
+def _ensure_can_modify(ticket: dict, current_user: dict) -> None:
+    """
+    Un SOC L2 ne peut modifier que les tickets qui lui sont assignés.
+    L'ADMIN peut tout modifier. La lecture reste ouverte à tous les rôles autorisés.
+    """
+    if current_user.get("role") == "ADMIN":
+        return
+    if ticket.get("assigned_to") != current_user.get("username"):
+        raise HTTPException(status_code=403, detail="This incident is assigned to another analyst.")
+
+
+def _ensure_l2_analyst(username: str) -> None:
+    conn = sqlite3.connect(DATABASE_PATH)
+    row = conn.execute("SELECT role FROM users WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    if not row or row[0] != "SOC_L2":
+        raise HTTPException(status_code=400, detail="An incident can only be assigned to an existing SOC L2 analyst.")
 
 @router.get("", response_model=list[TicketSchema])
 def get_tickets(
@@ -43,11 +67,16 @@ def update_ticket(
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} introuvable")
 
     current_ticket = row.to_dict(orient="records")[0]
+    _ensure_can_modify(current_ticket, current_user)
 
     fields = {}
     if update.status:
-        fields["status"] = update.status.upper()
+        status = update.status.upper()
+        if status not in TICKET_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {', '.join(sorted(TICKET_STATUSES))}")
+        fields["status"] = status
     if update.assigned_to is not None:
+        _ensure_l2_analyst(update.assigned_to)
         fields["assigned_to"] = update.assigned_to
     if update.comments is not None:
         fields["comments"] = update.comments
@@ -75,6 +104,7 @@ def generate_report(
         raise HTTPException(status_code=404, detail="Ticket introuvable")
     
     ticket_data = row.to_dict(orient="records")[0]
+    _ensure_can_modify(ticket_data, current_user)
     
     # Récupérer l'alerte d'origine complète (le join de get_tickets_dataframe ne contient pas tout)
     alert_id = ticket_data["alert_id"]

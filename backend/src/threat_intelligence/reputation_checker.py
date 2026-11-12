@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from src.threat_intelligence.virustotal_client import VirusTotalClient
 from src.threat_intelligence.abuseipdb_client import AbuseIPDBClient
+from src.utils.net import safe_ip
 
 
 # Statuts d'évaluation (champ "assessment_status")
@@ -35,6 +36,22 @@ class ReputationChecker:
 
     def check_ip(self, ip):
         checked_at = _now_utc()
+
+        normalized_ip = safe_ip(ip)
+        if normalized_ip is None:
+            # Valeur invalide : aucune requête externe (l'IP irait dans l'URL de l'API)
+            failed = {"status": SOURCE_NOT_CHECKED, "checked_at": checked_at, "error": "Invalid IP address"}
+            return {
+                "reputation": NOT_CHECKED,
+                "score": None,
+                "assessment_status": NOT_CHECKED,
+                "checked_at": checked_at,
+                "sources": {
+                    "VirusTotal": {"engine": "VirusTotal", **failed},
+                    "AbuseIPDB": {"engine": "AbuseIPDB", **failed},
+                },
+            }
+        ip = normalized_ip
 
         try:
             ip_obj = ipaddress.ip_address(ip)

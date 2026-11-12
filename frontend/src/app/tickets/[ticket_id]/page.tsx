@@ -93,8 +93,12 @@ export default function TicketDetailPage() {
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
-  const canEdit = user?.role === "SOC_L2" || user?.role === "ADMIN";
-  const canGenerateReport = user?.role === "SOC_L2" || user?.role === "ADMIN";
+  // Mirrors the backend rule: an L2 can only modify incidents assigned to them.
+  const isInvestigator = user?.role === "SOC_L2" || user?.role === "ADMIN";
+  const canEdit =
+    user?.role === "ADMIN" ||
+    (user?.role === "SOC_L2" && !!ticket && ticket.assigned_to === user.username);
+  const canGenerateReport = canEdit;
 
   useEffect(() => {
     fetchTicket(ticketId)
@@ -105,10 +109,10 @@ export default function TicketDetailPage() {
       .catch(() => setError("Incident not found"));
 
     loadReports();
-    if (canEdit) {
+    if (isInvestigator) {
       fetchAnalysts("SOC_L2").then(setAnalysts).catch(console.error);
     }
-  }, [ticketId, canEdit]);
+  }, [ticketId, isInvestigator]);
 
   const loadReports = () => {
     setLoadingReports(true);
