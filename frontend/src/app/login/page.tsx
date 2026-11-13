@@ -47,7 +47,8 @@ export default function LoginPage() {
         role: data.role,
         username: data.username || username,
       }));
-      window.location.href = "/"; // Force reload to apply auth state
+      // useAuth re-reads the stored session on every route change.
+      router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed.");
     } finally {

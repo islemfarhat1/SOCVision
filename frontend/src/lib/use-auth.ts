@@ -49,7 +49,7 @@ export function useAuth() {
           setUser(userData);
           localStorage.setItem("auth_user", JSON.stringify(userData));
         }
-      } catch (e) {
+      } catch {
         // Token invalide ou expiré
         localStorage.removeItem("auth_token");
         localStorage.removeItem("auth_user");

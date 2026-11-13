@@ -1,5 +1,15 @@
 from src.scoring.scoring_rules import ATTACK_SCORES
 
+# Points per factor. Exposed by GET /api/system/status so the UI shows the real model.
+# (minimum count, points), checked from the highest tier down
+WAZUH_FREQUENCY_TIERS = [(12, 20), (8, 15), (5, 10), (3, 5)]
+# (count strictly above, points) for the CICIDS2017 flows
+FLOW_FREQUENCY_TIERS = [(100000, 20), (10000, 10), (1000, 5)]
+REPUTATION_POINTS = {"malicious": 20, "suspicious": 10}
+MITRE_POINTS = 15
+# (minimum score, priority), checked from the highest down
+PRIORITY_THRESHOLDS = [(70, "CRITICAL"), (40, "HIGH"), (20, "MEDIUM"), (0, "LOW")]
+
 
 class ScoringEngine:
     """
@@ -68,85 +78,32 @@ class ScoringEngine:
             return 0
 
         if event_type == "wazuh":
-            if frequency >= 12:
-                return 20
-            elif frequency >= 8:
-                return 15
-            elif frequency >= 5:
-                return 10
-            elif frequency >= 3:
-                return 5
-            else:
-                return 0
-
-        if frequency > 100000:
-            return 20
-
-        elif frequency > 10000:
-            return 10
-
-        elif frequency > 1000:
-            return 5
-
-        else:
+            for minimum, points in WAZUH_FREQUENCY_TIERS:
+                if frequency >= minimum:
+                    return points
             return 0
 
-
-
-    
-            
-
-
+        for above, points in FLOW_FREQUENCY_TIERS:
+            if frequency > above:
+                return points
+        return 0
 
     def calculate_reputation_score(self, reputation):
-
         """
-        Transforme le résultat Threat Intelligence
-        en points de criticité SOC.
+        Transforme le résultat Threat Intelligence en points de criticité SOC.
+        "clean", "not_checked" (TI indisponible) et IP privée : aucun point.
+        Un lookup en échec n'ajoute rien, mais n'est jamais traité comme "clean"
+        ailleurs dans le pipeline (prompt LLM, affichage).
         """
-
         if reputation is None:
             return 0
-
-
-        reputation_value = reputation.get(
-            "reputation"
-        )
-
-
-        if reputation_value == "malicious":
-            return 20
-
-        elif reputation_value == "suspicious":
-            return 10
-
-        # "clean", "not_checked" (TI indisponible) et IP privée : aucun point.
-        # Un lookup en échec n'ajoute rien, mais n'est jamais traité comme "clean"
-        # ailleurs dans le pipeline (prompt LLM, affichage).
-
-        else:
-            return 0
-
-
+        return REPUTATION_POINTS.get(reputation.get("reputation"), 0)
 
     def calculate_priority(self, score):
+        for minimum, priority in PRIORITY_THRESHOLDS:
+            if score >= minimum:
+                return priority
+        return "LOW"
 
-        if score >= 70:
-            return "CRITICAL"
-
-        elif score >= 40:
-            return "HIGH"
-
-        elif score >= 20:
-            return "MEDIUM"
-
-        else:
-            return "LOW"
-        
     def calculate_mitre_score(self, mitre_technique):
-
-
-        if mitre_technique:
-         return 15
-
-        return 0
+        return MITRE_POINTS if mitre_technique else 0

@@ -31,6 +31,35 @@ export async function fetchHealth(): Promise<ApiHealth> {
   return res.json();
 }
 
+export type SystemStatus = {
+  version: string;
+  checked_at: string;
+  database: string;
+  threat_intel: { virustotal_configured: boolean; abuseipdb_configured: boolean };
+  llm: {
+    ollama_reachable: boolean;
+    local_models: { name: string; installed: boolean }[];
+    cloud_fallback_configured: boolean;
+    cloud_models: string[];
+  };
+  wazuh_webhook_enabled: boolean;
+  scoring: {
+    attack_types: Record<string, number>;
+    wazuh_frequency_tiers: [number, number][];
+    flow_frequency_tiers: [number, number][];
+    reputation_points: Record<string, number>;
+    mitre_points: number;
+    priority_thresholds: [number, string][];
+  };
+};
+
+/** Real platform configuration and scoring model (authenticated). */
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  const res = await fetch(`${API_BASE_URL}/system/status`, { headers: getHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load the platform status");
+  return res.json();
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export async function login(username: string, password: string) {

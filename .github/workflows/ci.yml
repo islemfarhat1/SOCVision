@@ -39,7 +39,7 @@ jobs:
           JWT_SECRET_KEY: ci-only-secret
         run: python -m pytest -v
 
-  # 2. Frontend : typage TypeScript + build de production Next.js
+  # 2. Frontend : typage TypeScript, ESLint et build de production Next.js
   frontend-build:
     name: Frontend Type Check & Build
     runs-on: ubuntu-latest
@@ -62,6 +62,10 @@ jobs:
       - name: Type check
         working-directory: frontend
         run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: frontend
+        run: npx eslint src --max-warnings 0
 
       - name: Production build
         working-directory: frontend

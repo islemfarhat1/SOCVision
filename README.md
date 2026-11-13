@@ -79,7 +79,7 @@ The prototype also includes n8n automation integrations and a GitHub Actions CI 
 The GitHub Actions workflow includes:
 
 - Backend unit tests with Pytest (API filters, authentication and roles, webhook security, threat-intelligence failure handling, LLM prompt safeguards), run against a throw-away database without external API calls.
-- Frontend type checking and Next.js production build.
+- Frontend type checking, ESLint (no warnings allowed) and Next.js production build.
 - Secret detection with Gitleaks.
 - Static application security testing with Semgrep.
 - Dependency vulnerability scanning with Trivy.

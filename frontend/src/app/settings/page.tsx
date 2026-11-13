@@ -1,227 +1,168 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth-guard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  Settings2,
-  Shield,
-  Brain,
-  Activity,
-  Database,
-  Wifi,
-  Bot,
-  Zap,
-  CheckCircle2,
-  Cpu,
-  Lock,
-} from "lucide-react";
+import { StateDot } from "@/components/status";
+import { SeverityBadge } from "@/components/severity";
+import { fetchSystemStatus, type SystemStatus } from "@/lib/api";
+import { parseDate } from "@/lib/time";
 
-// ── Shared Subcomponents ──────────────────────────────────────────────────────
-
-function SectionHeader({
-  icon: Icon,
-  title,
-}: {
-  icon: React.ElementType;
-  title: string;
-}) {
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 mb-1">
-      <Icon className="h-4 w-4 text-primary shrink-0" />
-      <span className="text-sm font-semibold text-foreground uppercase tracking-wider">
-        {title}
-      </span>
-    </div>
+    <section className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-4 md:gap-8 py-8 border-b border-border last:border-0">
+      <div>
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {description && <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{description}</p>}
+      </div>
+      <div className="rounded-lg border border-border bg-card divide-y divide-border">{children}</div>
+    </section>
   );
 }
 
-function DetailRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-between items-center py-2.5 border-b border-border/30 last:border-0 text-sm">
-      <span className="text-muted-foreground font-medium">{label}</span>
-      <span className={`text-foreground font-semibold ${mono ? "font-mono text-xs" : ""}`}>{value}</span>
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-3 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right">{children}</span>
     </div>
   );
 }
-
-// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const SCORING_MODEL = [
-    { factor: "Type d'attaque", weight: 30 },
-    { factor: "Réputation IOC", weight: 30 },
-    { factor: "Fréquence", weight: 20 },
-    { factor: "Contexte MITRE", weight: 20 },
-  ];
+  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    fetchSystemStatus().then(setStatus).catch(() => setError(true));
+  }, []);
 
   return (
     <AuthGuard>
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Settings — Informations & Configuration Générale" />
-        <main className="flex-1 overflow-y-auto p-6 bg-background">
-          <div className="max-w-5xl mx-auto space-y-6">
+        <Header title="Settings" />
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-5xl mx-auto px-6 py-2">
+            {error && (
+              <p role="alert" className="mt-6 text-sm text-destructive">Could not load the platform status. Check that the API is running.</p>
+            )}
+            {!status && !error && <p className="mt-6 text-sm text-muted-foreground">Loading…</p>}
 
-            {/* ── Section 1: Informations Générales ── */}
-            <Card className="bg-card/80 border-border/60 shadow-sm">
-              <CardHeader className="pb-3 border-b border-border/40">
-                <CardTitle className="text-sm">
-                  <SectionHeader icon={Shield} title="1. Informations générales" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-1">
-                <DetailRow label="Plateforme" value="SOCVision" />
-                <DetailRow label="Périmètre" value="Analyse, qualification et investigation des alertes de sécurité" />
-                <DetailRow label="Données de test" value="CICIDS2017 et alertes simulées" />
-                <DetailRow label="Approche décisionnelle" value={
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
-                    Human-in-the-Loop
-                  </Badge>
-                } />
-              </CardContent>
-            </Card>
+            {status && (
+              <>
+                <p className="mt-6 text-xs text-muted-foreground">
+                  Live values read from the API · version {status.version} · checked {parseDate(status.checked_at)?.toLocaleString()}
+                </p>
 
-            {/* ── Row 2: Pipeline SOC & Risk Scoring Model ── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="bg-card/80 border-border/60 shadow-sm">
-                <CardHeader className="pb-3 border-b border-border/40">
-                  <CardTitle className="text-sm">
-                    <SectionHeader icon={Settings2} title="2. Pipeline SOC" />
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <DetailRow label="Qualification L1" value="Règles déterministes" />
-                  <DetailRow label="Escalade" value="Création d'un ticket de suivi L2" />
-                  <DetailRow label="Ticket" value="Identifiant TCK-XXXXXX" mono />
-                </CardContent>
-              </Card>
+                <Section title="Platform" description="Services the console depends on.">
+                  <Row label="Database">
+                    <StateDot ok={status.database === "connected"} label={status.database === "connected" ? "Connected" : "Unreachable"} />
+                  </Row>
+                  <Row label="Wazuh webhook">
+                    <StateDot
+                      ok={status.wazuh_webhook_enabled}
+                      warn
+                      label={status.wazuh_webhook_enabled ? "Enabled (token configured)" : "Disabled — no token configured"}
+                    />
+                  </Row>
+                </Section>
 
-              <Card className="bg-card/80 border-border/60 shadow-sm">
-                <CardHeader className="pb-3 border-b border-border/40">
-                  <CardTitle className="text-sm">
-                    <SectionHeader icon={Zap} title="Scoring de Risque Multi-Facteurs" />
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-4 space-y-3">
-                  {SCORING_MODEL.map((item) => (
-                    <div key={item.factor} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground font-medium">{item.factor}</span>
-                        <span className="font-semibold text-foreground font-mono">{item.weight}%</span>
-                      </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary/70 rounded-full"
-                          style={{ width: `${item.weight}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex justify-between text-xs pt-2 border-t border-border/40">
-                    <span className="font-semibold text-foreground">Total</span>
-                    <span className="font-bold text-primary font-mono">100%</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                <Section
+                  title="Threat intelligence"
+                  description="External IP reputation. A lookup that fails is reported as “not checked”, never as clean."
+                >
+                  <Row label="VirusTotal">
+                    <StateDot ok={status.threat_intel.virustotal_configured} warn label={status.threat_intel.virustotal_configured ? "API key configured" : "No API key"} />
+                  </Row>
+                  <Row label="AbuseIPDB">
+                    <StateDot ok={status.threat_intel.abuseipdb_configured} warn label={status.threat_intel.abuseipdb_configured ? "API key configured" : "No API key"} />
+                  </Row>
+                  <Row label="MITRE ATT&CK">Built-in mapping of detection rules</Row>
+                </Section>
 
-            {/* ── Section 3: AI Assistant Configuration ── */}
-            <Card className="bg-card/80 border-border/60 shadow-sm">
-              <CardHeader className="pb-3 border-b border-border/40">
-                <CardTitle className="text-sm">
-                  <SectionHeader icon={Brain} title="3. AI Assistant Configuration" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-1">
-                <DetailRow label="LLM Provider" value="Ollama" />
-                <DetailRow label="Deployment" value="Local" />
-                <DetailRow label="Model" value="qwen2.5:7b" mono />
-                <DetailRow label="Role" value="Alert explanation, contextual summary and recommended actions" />
-                <DetailRow label="Automatic Decision" value={
-                  <span className="flex items-center gap-1.5 text-xs text-amber-400 font-semibold">
-                    <Lock className="h-3.5 w-3.5" />
-                    Disabled
-                  </span>
-                } />
-                <DetailRow label="Decision Model" value={
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
-                    Human-in-the-Loop
-                  </Badge>
-                } />
-              </CardContent>
-            </Card>
-
-            {/* ── Section 4: Threat Intelligence ── */}
-            <Card className="bg-card/80 border-border/60 shadow-sm">
-              <CardHeader className="pb-3 border-b border-border/40">
-                <CardTitle className="text-sm">
-                  <SectionHeader icon={Shield} title="4. Threat Intelligence" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="flex items-center justify-between py-2.5 border-b border-border/30">
-                  <span className="text-sm text-muted-foreground font-medium">VirusTotal</span>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Configuré
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-2.5 border-b border-border/30">
-                  <span className="text-sm text-muted-foreground font-medium">AbuseIPDB</span>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Configuré
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-2.5 border-0">
-                  <span className="text-sm text-muted-foreground font-medium">MITRE ATT&CK</span>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-sky-400">
-                    <span className="h-2 w-2 rounded-full bg-sky-400" />
-                    Intégré
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* ── Section 5: État de la plateforme ── */}
-            <Card className="bg-card/80 border-border/60 shadow-sm">
-              <CardHeader className="pb-3 border-b border-border/40">
-                <CardTitle className="text-sm">
-                  <SectionHeader icon={Activity} title="5. État de la plateforme" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: "Backend API", icon: Wifi, status: "Actif" },
-                    { label: "Base SQLite", icon: Database, status: "Disponible" },
-                    { label: "Pipeline de traitement", icon: CheckCircle2, status: "Actif" },
-                    { label: "Service IA", icon: Cpu, status: "Actif" },
-                  ].map(({ label, icon: Icon, status }) => (
-                    <div
-                      key={label}
-                      className="flex flex-col items-center gap-2 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-center shadow-inner"
-                    >
-                      <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                        <Icon className="h-5 w-5 text-emerald-400 animate-pulse" />
-                      </div>
-                      <span className="text-xs font-bold text-foreground leading-tight mt-1">{label}</span>
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                        {status}
+                <Section
+                  title="AI assistant"
+                  description="Explains alerts and drafts incident reports. It never escalates, dismisses or closes anything: decisions stay with the analyst."
+                >
+                  <Row label="Ollama (local)">
+                    <StateDot ok={status.llm.ollama_reachable} label={status.llm.ollama_reachable ? "Reachable" : "Not reachable"} />
+                  </Row>
+                  <Row label="Local models, in order of use">
+                    <span className="flex flex-wrap justify-end gap-x-4 gap-y-1">
+                      {status.llm.local_models.map((m, i) => (
+                        <span key={m.name} className="inline-flex items-center gap-1.5">
+                          <span className="text-muted-foreground">{i + 1}.</span>
+                          <span className="font-mono">{m.name}</span>
+                          <span className={m.installed ? "text-emerald-400" : "text-muted-foreground"}>
+                            {m.installed ? "installed" : "not installed"}
+                          </span>
+                        </span>
+                      ))}
+                    </span>
+                  </Row>
+                  <Row label="Cloud fallback (OpenRouter)">
+                    {status.llm.cloud_fallback_configured ? (
+                      <span>
+                        Enabled · <span className="font-mono">{status.llm.cloud_models.join(", ")}</span>
+                        <span className="block text-xs text-amber-300">Alert data leaves the lab when the local models fail.</span>
                       </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    ) : (
+                      <span className="text-muted-foreground">Disabled — no API key, analysis stays local</span>
+                    )}
+                  </Row>
+                  <Row label="Automatic decisions">Disabled (human-in-the-loop)</Row>
+                </Section>
 
-            <p className="text-xs text-muted-foreground text-center pt-2">
-              Le LLM fonctionne localement comme copilote d'aide à la décision. L'ensemble des contrôles reste supervisé par les analystes SOC.
-            </p>
+                <Section
+                  title="Risk scoring"
+                  description="Deterministic points added by the scoring engine. These are the values the backend applies."
+                >
+                  <Row label="Priority thresholds">
+                    <span className="flex flex-wrap justify-end gap-2">
+                      {status.scoring.priority_thresholds.map(([min, priority]) => (
+                        <span key={priority} className="inline-flex items-center gap-1.5">
+                          <SeverityBadge severity={priority} />
+                          <span className="tabular-nums text-muted-foreground">≥ {min}</span>
+                        </span>
+                      ))}
+                    </span>
+                  </Row>
+                  <Row label="IP reputation">
+                    <span className="tabular-nums">
+                      {Object.entries(status.scoring.reputation_points).map(([k, v]) => `${k} +${v}`).join(" · ")} · other / not checked +0
+                    </span>
+                  </Row>
+                  <Row label="MITRE technique mapped">
+                    <span className="tabular-nums">+{status.scoring.mitre_points}</span>
+                  </Row>
+                  <Row label="Frequency (Wazuh events)">
+                    <span className="tabular-nums">
+                      {status.scoring.wazuh_frequency_tiers.map(([n, pts]) => `≥ ${n}: +${pts}`).join(" · ")}
+                    </span>
+                  </Row>
+                  <Row label="Frequency (CICIDS2017 flows)">
+                    <span className="tabular-nums">
+                      {status.scoring.flow_frequency_tiers.map(([n, pts]) => `> ${n.toLocaleString()}: +${pts}`).join(" · ")}
+                    </span>
+                  </Row>
+                  <div className="px-4 py-3">
+                    <p className="text-sm text-muted-foreground mb-2">Attack type (base points)</p>
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {Object.entries(status.scoring.attack_types).map(([type, pts]) => (
+                          <tr key={type} className="border-t border-border first:border-0">
+                            <td className="py-1.5">{type}</td>
+                            <td className="py-1.5 text-right tabular-nums text-muted-foreground">+{pts}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Section>
+              </>
+            )}
           </div>
         </main>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, ShieldAlert, ShieldX, HelpCircle, Server } from "lucide-react";
+import { Server } from "lucide-react";
 
 type SourceMeta = {
   status?: "ok" | "not_checked";
@@ -14,7 +14,6 @@ type VirusTotalData = SourceMeta & {
   suspicious?: number;
   harmless?: number;
   undetected?: number;
-  [key: string]: any;
 };
 
 type AbuseIPDBData = SourceMeta & {
@@ -25,7 +24,6 @@ type AbuseIPDBData = SourceMeta & {
   abuse_confidence_score?: number | string;
   reports?: number | string;
   total_reports?: number | string;
-  [key: string]: any;
 };
 
 type ParsedReputation = {
@@ -33,10 +31,13 @@ type ParsedReputation = {
   score?: number | null;
   assessment_status?: "not_applicable" | "complete" | "partial" | "not_checked";
   checked_at?: string;
+  // Failed lookups are stored as null in older records.
   sources?: {
-    VirusTotal?: VirusTotalData;
-    AbuseIPDB?: AbuseIPDBData;
-    [key: string]: any;
+    VirusTotal?: VirusTotalData | null;
+    AbuseIPDB?: AbuseIPDBData | null;
+    virustotal?: VirusTotalData | null;
+    abuseipdb?: AbuseIPDBData | null;
+    "External reputation"?: string;
   };
 };
 
@@ -53,7 +54,7 @@ function parseReputationData(raw: string | null | undefined): { parsed: ParsedRe
     if (typeof json === "object" && json !== null) {
       return { parsed: json, rawString: trimmed };
     }
-  } catch (e) {
+  } catch {
     // Not standard JSON, try fixing Python single-quoted dict string
   }
 
@@ -68,7 +69,7 @@ function parseReputationData(raw: string | null | undefined): { parsed: ParsedRe
     if (typeof json === "object" && json !== null) {
       return { parsed: json, rawString: trimmed };
     }
-  } catch (e) {
+  } catch {
     // Failed fallback parsing
   }
 

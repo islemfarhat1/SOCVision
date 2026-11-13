@@ -295,3 +295,33 @@ def test_report_code_fence_is_stripped():
     inner = f"# Report\n\n{fence}\nlog line\n{fence}\nEnd"
     assert strip_code_fence(inner) == inner
     assert strip_code_fence(None) is None
+
+
+# ── /api/system/status ───────────────────────────────────────────────────────
+
+def test_system_status_requires_auth():
+    assert client.get("/api/system/status").status_code == 401
+
+
+def test_system_status_reports_config_without_secrets(monkeypatch):
+    from config import api_keys
+    from src.api.routers import system as system_router
+    from src.dependencies import get_current_user
+
+    monkeypatch.setattr(api_keys, "VIRUSTOTAL_API_KEY", "vt-secret-value-123")
+    monkeypatch.setattr(api_keys, "ABUSEIPDB_API_KEY", "")
+    monkeypatch.setattr(system_router, "_ollama_models", lambda: None)  # Ollama down
+    app.dependency_overrides[get_current_user] = lambda: {"username": "m", "role": "MANAGER"}
+    try:
+        r = client.get("/api/system/status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r.status_code == 200
+    body = r.json()
+    assert "vt-secret-value-123" not in r.text
+    assert body["threat_intel"] == {"virustotal_configured": True, "abuseipdb_configured": False}
+    assert body["llm"]["ollama_reachable"] is False
+    assert all(m["installed"] is False for m in body["llm"]["local_models"])
+    assert body["scoring"]["mitre_points"] == 15
+    assert body["scoring"]["priority_thresholds"][0] == [70, "CRITICAL"]
