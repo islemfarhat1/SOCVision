@@ -2,12 +2,13 @@ import sqlite3
 from typing import Annotated
 import bcrypt
 from fastapi import APIRouter, HTTPException, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config.settings import DATABASE_PATH, LOGIN_MAX_FAILURES, LOGIN_LOCKOUT_SECONDS
 from src.login_rate_limiter import LoginRateLimiter
 from src.security import verify_password, create_access_token
 from src.dependencies import get_current_user
+from src.database.database_manager import DatabaseManager
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -83,3 +84,39 @@ def login(credentials: LoginRequest, request: Request):
 def get_me(current_user: Annotated[dict, Depends(get_current_user)]):
     """Vérifie le token dans le header Authorization et retourne les infos de l'utilisateur."""
     return current_user
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+@router.post("/password", status_code=204)
+def change_own_password(
+    payload: PasswordChange,
+    request: Request,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """
+    Changement de son propre mot de passe. Le mot de passe actuel est exigé (une session
+    restée ouverte ne suffit pas) et les erreurs comptent dans l'anti brute-force du login.
+    """
+    username = current_user["username"]
+    client_ip = request.client.host if request.client else "unknown"
+
+    wait = login_limiter.retry_after(username, client_ip)
+    if wait:
+        raise HTTPException(status_code=429, detail="Too many failed attempts. Try again later.",
+                            headers={"Retry-After": str(wait)})
+
+    user = get_user_by_username(username)
+    if not user or not user.get("password_hash") or not verify_password(payload.current_password, user["password_hash"]):
+        login_limiter.record_failure(username, client_ip)
+        raise HTTPException(status_code=400, detail="The current password is incorrect.")
+    if verify_password(payload.new_password, user["password_hash"]):
+        raise HTTPException(status_code=400, detail="The new password must be different from the current one.")
+
+    db = DatabaseManager()
+    db.update_user(username, {"password_hash": bcrypt.hashpw(payload.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")})
+    db.add_audit_event(username, "PASSWORD_CHANGED", details={"username": username})
+    login_limiter.record_success(username)

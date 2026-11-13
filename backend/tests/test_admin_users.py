@@ -110,3 +110,38 @@ def test_disabled_accounts_cannot_be_assigned():
     client.patch(f"/api/admin/users/{analyst}", headers=headers(ADMIN), json={"disabled": True})
     listed = client.get("/api/users?role=SOC_L2", headers=headers(ADMIN)).json()
     assert analyst not in [u["username"] for u in listed]
+
+
+# ── Self-service password change ─────────────────────────────────────────────
+
+def change(username, current, new):
+    return client.post("/api/auth/password", headers=headers(username),
+                       json={"current_password": current, "new_password": new})
+
+
+def test_user_changes_own_password():
+    username = new_account(password="Initial-Pass-123")
+    assert change(username, "Initial-Pass-123", "My-Own-Secret-77").status_code == 204
+    assert login(username, "Initial-Pass-123").status_code == 401
+    assert login(username, "My-Own-Secret-77").status_code == 200
+
+    events = client.get("/api/admin/audit", headers=headers(ADMIN)).json()
+    assert any(e["action"] == "PASSWORD_CHANGED" and e["actor"] == username for e in events)
+    assert "My-Own-Secret-77" not in str(events)
+
+
+def test_password_change_rules():
+    username = new_account(password="Initial-Pass-123")
+    assert change(username, "wrong-current", "Another-Pass-88").status_code == 400
+    assert change(username, "Initial-Pass-123", "Initial-Pass-123").status_code == 400  # same as current
+    assert change(username, "Initial-Pass-123", "short").status_code == 422
+    assert client.post("/api/auth/password", json={"current_password": "x", "new_password": "Another-Pass-88"}).status_code == 401
+
+
+def test_wrong_current_password_is_rate_limited():
+    auth_router.login_limiter = LoginRateLimiter(3, 600)
+    username = new_account(password="Initial-Pass-123")
+    for _ in range(3):
+        assert change(username, "guess", "Another-Pass-88").status_code == 400
+    r = change(username, "Initial-Pass-123", "Another-Pass-88")  # even the right one is blocked now
+    assert r.status_code == 429 and int(r.headers["Retry-After"]) > 0

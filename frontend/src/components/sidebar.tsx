@@ -95,14 +95,25 @@ export function Sidebar() {
 
       {user && (
         <div className="border-t border-sidebar-border p-2">
-          <div className="flex items-center gap-2.5 px-2 py-1.5">
-            <span className="h-7 w-7 rounded-sm bg-sidebar-accent text-[11px] font-semibold flex items-center justify-center shrink-0">
-              {initials(user.full_name)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium truncate">{user.full_name}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{ROLE_LABELS[user.role] ?? user.role}</p>
-            </div>
+          <div className="flex items-center gap-1 px-1 py-1">
+            <Link
+              href="/account"
+              title="My account"
+              aria-label={`My account: ${user.full_name}`}
+              aria-current={pathname === "/account" ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-2.5 min-w-0 flex-1 px-1 py-0.5 rounded-sm hover:bg-sidebar-accent/60",
+                pathname === "/account" && "bg-sidebar-accent"
+              )}
+            >
+              <span className="h-7 w-7 rounded-sm bg-sidebar-accent text-[11px] font-semibold flex items-center justify-center shrink-0">
+                {initials(user.full_name)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-medium truncate">{user.full_name}</span>
+                <span className="block text-[11px] text-muted-foreground truncate">{ROLE_LABELS[user.role] ?? user.role}</span>
+              </span>
+            </Link>
             <button
               onClick={logout}
               aria-label="Sign out"

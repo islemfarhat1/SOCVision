@@ -449,7 +449,7 @@ class DatabaseManager:
         rows = connection.execute(
             """
             SELECT occurred_at, actor, action, details FROM audit_events
-            WHERE action LIKE 'USER_%' OR action = 'PASSWORD_RESET'
+            WHERE action LIKE 'USER_%' OR action IN ('PASSWORD_RESET', 'PASSWORD_CHANGED')
             ORDER BY id DESC LIMIT ?
             """,
             (limit,),

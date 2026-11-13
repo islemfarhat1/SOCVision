@@ -38,6 +38,7 @@ function describeEvent(e: AccountEvent): string {
     case "USER_ENABLED": return `re-enabled ${who}`;
     case "USER_RENAMED": return `renamed ${who} to ${e.details.to}`;
     case "PASSWORD_RESET": return `reset the password of ${who}`;
+    case "PASSWORD_CHANGED": return "changed their own password";
     default: return e.action.toLowerCase();
   }
 }

@@ -306,3 +306,20 @@ export const adminApi = {
     adminRequest<void>(`/users/${encodeURIComponent(username)}/password`, { method: "POST", body: JSON.stringify({ password }) }),
   accountEvents: () => adminRequest<AccountEvent[]>("/audit"),
 };
+
+/** Change one's own password (the current password is required). */
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/auth/password`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (res.ok) return;
+  if (res.status === 429) {
+    const minutes = Math.ceil(Number(res.headers.get("Retry-After") ?? "900") / 60);
+    throw new Error(`Too many failed attempts. Try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`);
+  }
+  const body = await res.json().catch(() => null);
+  const detail = body?.detail;
+  throw new Error(typeof detail === "string" ? detail : "The new password must have at least 10 characters.");
+}
