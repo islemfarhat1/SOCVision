@@ -2,10 +2,13 @@ import requests
 from config.settings import N8N_WEBHOOK_URL
 
 
-def notify_n8n(ticket: dict):
-    """Envoie le ticket à n8n si sa sévérité justifie une notification."""
+def notify_n8n(ticket: dict) -> dict:
+    """
+    Envoie le ticket à n8n si sa sévérité justifie une notification.
+    Retourne le résultat pour le journal d'audit : sent / failed / skipped.
+    """
     if ticket.get("severity") not in ("CRITICAL", "HIGH"):
-        return
+        return {"status": "skipped", "reason": "severity below HIGH"}
 
     try:
         payload = {
@@ -24,5 +27,9 @@ def notify_n8n(ticket: dict):
         }
         response = requests.post(N8N_WEBHOOK_URL, json=payload, timeout=5)
         print(f"[n8n] Notification envoyee pour {ticket['ticket_id']} : {response.status_code}")
+        if response.ok:
+            return {"status": "sent", "http_status": response.status_code}
+        return {"status": "failed", "error": f"HTTP {response.status_code}"}
     except requests.RequestException as e:
         print(f"[n8n] Echec de notification pour {ticket['ticket_id']} : {e}")
+        return {"status": "failed", "error": type(e).__name__}

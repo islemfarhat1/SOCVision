@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/use-auth";
 import { IpReputationDisplay } from "@/components/ip-reputation";
 import { IncidentReportDocument } from "@/components/incident-report";
 import { ScoreBreakdown, type ScoreBreakdownData } from "@/components/score-breakdown";
+import { ActivityTimeline } from "@/components/activity-timeline";
 import { cn } from "@/lib/utils";
 import { SEVERITY_STYLES } from "@/components/severity";
 
@@ -88,7 +89,7 @@ export default function TicketDetailPage() {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [activeTab, setActiveTab] = useState<"investigation" | "reports">("investigation");
+  const [activeTab, setActiveTab] = useState<"investigation" | "reports" | "activity">("investigation");
 
   const [analysts, setAnalysts] = useState<Analyst[]>([]);
   const [comments, setComments] = useState("");
@@ -294,6 +295,7 @@ export default function TicketDetailPage() {
                   {([
                     ["investigation", "Investigation"],
                     ["reports", "Reports"],
+                    ["activity", "Activity"],
                   ] as const).map(([key, label]) => (
                     <button
                       key={key}
@@ -486,6 +488,21 @@ export default function TicketDetailPage() {
                       </details>
                     </aside>
                   </div>
+                )}
+
+                {/* ── Activity tab: who did what, when ── */}
+                {activeTab === "activity" && (
+                  <section className="max-w-3xl rounded-lg border border-border bg-card p-5">
+                    <h2 className="text-sm font-semibold mb-1">Incident activity</h2>
+                    <p className="text-sm text-muted-foreground mb-5">
+                      From the alert to the latest report. The audit log is append-only: entries cannot be edited or deleted.
+                    </p>
+                    <ActivityTimeline
+                      kind="ticket"
+                      id={ticket.ticket_id}
+                      refreshKey={`${ticket.status}|${ticket.assigned_to}|${ticket.comments?.length ?? 0}|${reports.length}`}
+                    />
+                  </section>
                 )}
 
                 {/* ── 3. Reports tab ── */}

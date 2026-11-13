@@ -9,6 +9,7 @@ from src.api.models import AlertSchema, AlertUpdateSchema, PromoteAlertSchema
 from src.dependencies import get_current_user, require_role, verify_webhook_token
 from src.utils.notifier import notify_n8n
 from src.scoring.explain import explain_score
+from src.audit.timeline import build_timeline
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 db = DatabaseManager()
@@ -113,9 +114,11 @@ def update_alert(
     """
     Permet à un analyste de changer le statut d'une alerte (ex: DISMISSED, UNDER_REVIEW).
     """
-    df = db.get_alerts_dataframe()
-    if alert_id not in df["alert_id"].values:
+    df = _clean(db.get_alerts_dataframe())
+    match = df[df["alert_id"] == alert_id]
+    if match.empty:
         raise HTTPException(status_code=404, detail="Alerte introuvable")
+    before = match.to_dict(orient="records")[0]
 
     fields = {}
     if update.status:
@@ -129,10 +132,31 @@ def update_alert(
         fields["classification"] = update.classification
 
     db.update_alert(alert_id, fields)
-    
+
+    actor = current_user.get("username")
+    if "status" in fields and fields["status"] != before.get("status"):
+        action = {"UNDER_REVIEW": "ALERT_TRIAGE_STARTED", "DISMISSED": "ALERT_DISMISSED"}.get(fields["status"], "ALERT_STATUS_CHANGED")
+        db.add_audit_event(actor, action, alert_id=alert_id, details={"from": before.get("status"), "to": fields["status"]})
+    if "investigation_notes" in fields and fields["investigation_notes"] != (before.get("investigation_notes") or ""):
+        db.add_audit_event(actor, "ALERT_NOTES_UPDATED", alert_id=alert_id,
+                           details={"length": len(fields["investigation_notes"] or "")})
+    if "classification" in fields and fields["classification"] != before.get("classification"):
+        db.add_audit_event(actor, "ALERT_CLASSIFIED", alert_id=alert_id,
+                           details={"from": before.get("classification"), "to": fields["classification"]})
+
     df = _clean(db.get_alerts_dataframe())
     row = df[df["alert_id"] == alert_id]
     return row.to_dict(orient="records")[0]
+
+
+@router.get("/{alert_id}/timeline")
+def get_alert_timeline(alert_id: str, current_user: ReadRoles):
+    """Chronologie de l'alerte : actions enregistrées + étapes reconstruites pour les données anciennes."""
+    df = _clean(db.get_alerts_dataframe())
+    row = df[df["alert_id"] == alert_id]
+    if row.empty:
+        raise HTTPException(status_code=404, detail=f"Alerte {alert_id} introuvable")
+    return build_timeline(row.to_dict(orient="records")[0], db.get_audit_events(alert_id=alert_id))
 
 
 @router.post("/{alert_id}/promote")
@@ -189,10 +213,15 @@ def promote_alert(
     # 4. Envoyer l'email n8n (on passe l'alerte d'origine enrichie du ticket_id)
     alert_dict["ticket_id"] = ticket_id
     alert_dict["assigned_to"] = payload.assigned_to
+    db.add_audit_event(current_user.get("username"), "ALERT_ESCALATED", alert_id=alert_id, ticket_id=ticket_id,
+                       details={"assigned_to": payload.assigned_to})
     try:
-        notify_n8n(alert_dict)
+        notification = notify_n8n(alert_dict)
     except Exception as e:
         print(f"Erreur notification n8n: {e}")
+        notification = {"status": "failed", "error": type(e).__name__}
+    db.add_audit_event("system", f"NOTIFICATION_{notification['status'].upper()}", alert_id=alert_id,
+                       ticket_id=ticket_id, details={"channel": "n8n", **{k: v for k, v in notification.items() if k != "status"}})
 
     return {"message": "Incident créé avec succès", "ticket_id": ticket_id}
 from typing import Dict, Any
@@ -237,6 +266,8 @@ def receive_wazuh_webhook(payload: Dict[Any, Any]):
     
     alert_dict = alert_generator.create_alert(alert_obj)
     db.insert_alert(alert_dict)
+    db.add_audit_event("wazuh-webhook", "ALERT_RECEIVED", alert_id=alert_dict["alert_id"],
+                       details={"source": "wazuh", "score": alert_dict["score"], "severity": alert_dict["severity"]})
 
     print(f"[WEBHOOK] [OK] NOUVELLE ALERTE INSÉRÉE EN BD: {alert_dict['alert_id']} ({alert_dict['attack_type']}) - Score: {alert_dict['score']}")
 

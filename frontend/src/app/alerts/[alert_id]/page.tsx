@@ -15,6 +15,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { useAuth } from "@/lib/use-auth";
 import { IpReputationDisplay } from "@/components/ip-reputation";
 import { ScoreBreakdown, type ScoreBreakdownData } from "@/components/score-breakdown";
+import { ActivityTimeline } from "@/components/activity-timeline";
 import { SEVERITY_STYLES } from "@/components/severity";
 
 type AlertDetail = {
@@ -434,6 +435,15 @@ export default function AlertDetailPage() {
                         )}
                       </dl>
                     </details>
+
+                    <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+                      <h2 className="text-sm font-semibold">Activity</h2>
+                      <ActivityTimeline
+                        kind="alert"
+                        id={alert.alert_id}
+                        refreshKey={`${alert.status}|${alert.investigation_notes?.length ?? 0}|${alert.reviewed_at}`}
+                      />
+                    </section>
                   </aside>
                 </div>
               </>

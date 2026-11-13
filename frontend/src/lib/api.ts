@@ -124,6 +124,24 @@ export async function fetchAlertStatusCounts(params: Record<string, string>): Pr
   return res.json();
 }
 
+export type TimelineEvent = {
+  at: string | null;
+  actor: string;
+  action: string;
+  source: "recorded" | "record" | "reconstructed";
+  details: Record<string, string | number | null>;
+  alert_id: string | null;
+  ticket_id: string | null;
+};
+
+/** Activity of one alert, or of a whole incident (alert + ticket + reports). */
+export async function fetchTimeline(kind: "alert" | "ticket", id: string): Promise<TimelineEvent[]> {
+  const path = kind === "alert" ? `alerts/${id}` : `tickets/${normalizeTicketId(id)}`;
+  const res = await fetch(`${API_BASE_URL}/${path}/timeline`, { headers: getHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load the activity");
+  return res.json();
+}
+
 export async function fetchAlert(alertId: string) {
   const res = await fetch(`${API_BASE_URL}/alerts/${alertId}`, { headers: getHeaders() });
   if (!res.ok) throw new Error("Failed to fetch alert");

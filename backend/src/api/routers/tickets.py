@@ -7,6 +7,7 @@ from src.database.database_manager import DatabaseManager
 from src.api.models import TicketSchema, TicketUpdateSchema
 from src.dependencies import get_current_user, require_role
 from src.scoring.explain import explain_score
+from src.audit.timeline import build_timeline
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 db = DatabaseManager()
@@ -86,6 +87,18 @@ def update_ticket(
 
     db.update_ticket(ticket_id, fields)
 
+    actor = current_user.get("username")
+    alert_id = current_ticket.get("alert_id")
+    if "status" in fields and fields["status"] != current_ticket.get("status"):
+        db.add_audit_event(actor, "TICKET_STATUS_CHANGED", alert_id=alert_id, ticket_id=ticket_id,
+                           details={"from": current_ticket.get("status"), "to": fields["status"]})
+    if "assigned_to" in fields and fields["assigned_to"] != current_ticket.get("assigned_to"):
+        db.add_audit_event(actor, "TICKET_REASSIGNED", alert_id=alert_id, ticket_id=ticket_id,
+                           details={"from": current_ticket.get("assigned_to"), "to": fields["assigned_to"]})
+    if "comments" in fields and fields["comments"] != (current_ticket.get("comments") or ""):
+        db.add_audit_event(actor, "TICKET_NOTES_UPDATED", alert_id=alert_id, ticket_id=ticket_id,
+                           details={"length": len(fields["comments"] or "")})
+
     df_updated = _clean(db.get_tickets_dataframe())
     updated_row = df_updated[df_updated["ticket_id"] == ticket_id]
     return updated_row.to_dict(orient="records")[0]
@@ -133,6 +146,26 @@ def generate_report(
     # Récupérer la ligne insérée
     reports = db.get_incident_reports(ticket_id)
     return reports[0]
+
+@router.get("/{ticket_id}/timeline")
+def get_ticket_timeline(
+    ticket_id: str,
+    current_user: Annotated[dict, Depends(require_role("SOC_L2", "MANAGER", "ADMIN"))]
+):
+    """Chronologie complète de l'incident : de la réception de l'alerte au dernier rapport."""
+    df = _clean(db.get_tickets_dataframe())
+    row = df[df["ticket_id"] == ticket_id]
+    if row.empty:
+        raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} introuvable")
+    ticket = row.to_dict(orient="records")[0]
+
+    alerts = _clean(db.get_alerts_dataframe())
+    alert_row = alerts[alerts["alert_id"] == ticket["alert_id"]]
+    alert = alert_row.to_dict(orient="records")[0] if not alert_row.empty else None
+
+    recorded = db.get_audit_events(alert_id=ticket["alert_id"], ticket_id=ticket_id)
+    return build_timeline(alert, recorded, ticket=ticket, reports=db.get_incident_reports(ticket_id))
+
 
 @router.get("/{ticket_id}/reports", response_model=list[IncidentReportSchema])
 def get_reports(

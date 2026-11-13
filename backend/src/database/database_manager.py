@@ -1,7 +1,8 @@
+import json
 import os
 import sqlite3
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 
 from config.settings import DATABASE_PATH
 
@@ -93,6 +94,21 @@ class DatabaseManager:
             version INTEGER NOT NULL DEFAULT 1
         )
         """)
+
+        # Journal d'audit (append-only) : qui a fait quoi, quand, sur quelle alerte / quel incident
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurred_at TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            action TEXT NOT NULL,
+            alert_id TEXT,
+            ticket_id TEXT,
+            details TEXT
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_alert ON audit_events(alert_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_ticket ON audit_events(ticket_id)")
 
         # Table des utilisateurs SOC
         cursor.execute("""
@@ -333,3 +349,36 @@ class DatabaseManager:
                 "version": r[5]
             } for r in rows
         ]
+
+    # ------------------ AUDIT ------------------
+
+    def add_audit_event(self, actor: str, action: str, alert_id: str = None, ticket_id: str = None, details: dict = None):
+        """Ajoute un événement au journal. Il n'existe volontairement aucune méthode de modification ou de suppression."""
+        connection = sqlite3.connect(self.db_path)
+        connection.execute(
+            "INSERT INTO audit_events (occurred_at, actor, action, alert_id, ticket_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                actor or "system",
+                action,
+                alert_id,
+                ticket_id,
+                json.dumps(details) if details else None,
+            ),
+        )
+        connection.commit()
+        connection.close()
+
+    def get_audit_events(self, alert_id: str = None, ticket_id: str = None):
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT occurred_at, actor, action, alert_id, ticket_id, details FROM audit_events
+            WHERE (? IS NOT NULL AND alert_id = ?) OR (? IS NOT NULL AND ticket_id = ?)
+            ORDER BY id
+            """,
+            (alert_id, alert_id, ticket_id, ticket_id),
+        ).fetchall()
+        connection.close()
+        return [{**dict(r), "details": json.loads(r["details"]) if r["details"] else {}} for r in rows]

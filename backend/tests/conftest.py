@@ -8,9 +8,14 @@ CICIDS2017, et s'exécutent à l'import. Ils ne sont donc pas collectés par pyt
 """
 
 import os
+import tempfile
 
 # Clé de test : src.security exige JWT_SECRET_KEY à l'import.
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret")
+
+# Les tests ne doivent jamais écrire dans la vraie base (database/soc_alerts.db) :
+# chaque session utilise une base jetable, sauf si DATABASE_PATH est déjà fourni (CI).
+os.environ.setdefault("DATABASE_PATH", os.path.join(tempfile.mkdtemp(prefix="socvision-tests-"), "soc_alerts.db"))
 
 collect_ignore = [
     "test_abuseipdb.py",
