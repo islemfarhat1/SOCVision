@@ -171,7 +171,7 @@ def promote_alert(
     # 0. Vérifier que l'utilisateur assigné est bien un SOC_L2
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT role FROM users WHERE username = ?", (payload.assigned_to,))
+    cursor.execute("SELECT role FROM users WHERE username = ? AND disabled = 0", (payload.assigned_to,))
     user_row = cursor.fetchone()
     conn.close()
     

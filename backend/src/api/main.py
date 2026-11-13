@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import FRONTEND_ORIGIN, API_VERSION, DATABASE_PATH, WAZUH_WEBHOOK_TOKEN
-from src.api.routers import tickets, alerts, stats, dashboard, system, users, auth
+from src.api.routers import tickets, alerts, stats, dashboard, system, users, auth, admin
 
 app = FastAPI(
     title="SOC AI Platform API",
@@ -29,6 +29,7 @@ app.include_router(stats.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 
 def _security_startup_checks() -> None:

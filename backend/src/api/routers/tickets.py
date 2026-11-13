@@ -32,7 +32,7 @@ def _ensure_can_modify(ticket: dict, current_user: dict) -> None:
 
 def _ensure_l2_analyst(username: str) -> None:
     conn = sqlite3.connect(DATABASE_PATH)
-    row = conn.execute("SELECT role FROM users WHERE username = ?", (username,)).fetchone()
+    row = conn.execute("SELECT role FROM users WHERE username = ? AND disabled = 0", (username,)).fetchone()
     conn.close()
     if not row or row[0] != "SOC_L2":
         raise HTTPException(status_code=400, detail="An incident can only be assigned to an existing SOC L2 analyst.")

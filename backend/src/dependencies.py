@@ -1,4 +1,5 @@
 import hmac
+import sqlite3
 from typing import Annotated
 from fastapi import Depends, Header, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -22,13 +23,18 @@ def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dict:
     payload = decode_token(token)
     if payload is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    
-    # On s'attend à ce que le payload contienne sub, full_name, et role
-    return {
-        "username": payload.get("sub"),
-        "full_name": payload.get("full_name"),
-        "role": payload.get("role"),
-    }
+
+    # The account is read from the database on every request, so a role change or a
+    # deactivation applies immediately instead of when the 8-hour token expires.
+    connection = sqlite3.connect(settings.DATABASE_PATH)
+    row = connection.execute(
+        "SELECT username, full_name, role, disabled FROM users WHERE username = ?", (payload.get("sub"),)
+    ).fetchone()
+    connection.close()
+    if row is None or row[3]:
+        raise HTTPException(status_code=401, detail="Account disabled or removed")
+
+    return {"username": row[0], "full_name": row[1], "role": row[2]}
 
 
 def require_role(*allowed_roles: str):

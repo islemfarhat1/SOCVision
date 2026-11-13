@@ -60,6 +60,10 @@ def login(credentials: LoginRequest, request: Request):
         login_limiter.record_failure(credentials.username, client_ip)
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
+    if user.get("disabled"):
+        # Only revealed after a correct password, so it does not help guessing accounts.
+        raise HTTPException(status_code=403, detail="This account is disabled. Contact your administrator.")
+
     login_limiter.record_success(credentials.username)
 
     token = create_access_token({

@@ -238,8 +238,8 @@ def ticket_api(monkeypatch, tmp_path):
 
     db_path = tmp_path / "soc.db"
     conn = sqlite3.connect(db_path)
-    conn.execute("CREATE TABLE users (username TEXT, role TEXT)")
-    conn.executemany("INSERT INTO users VALUES (?, ?)",
+    conn.execute("CREATE TABLE users (username TEXT, role TEXT, disabled INTEGER NOT NULL DEFAULT 0)")
+    conn.executemany("INSERT INTO users (username, role) VALUES (?, ?)",
                      [("l2.alice", "SOC_L2"), ("l2.bob", "SOC_L2"), ("l1.carl", "SOC_L1")])
     conn.commit()
     conn.close()

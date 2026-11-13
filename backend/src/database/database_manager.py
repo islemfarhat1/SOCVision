@@ -121,6 +121,11 @@ class DatabaseManager:
         )
         """)
 
+        # Comptes désactivés : conservés pour la traçabilité, mais plus de connexion possible
+        cursor.execute("PRAGMA table_info(users)")
+        if "disabled" not in [info[1] for info in cursor.fetchall()]:
+            cursor.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+
         # Seed users
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
@@ -350,6 +355,60 @@ class DatabaseManager:
             } for r in rows
         ]
 
+    # ------------------ USERS ------------------
+
+    def get_user(self, username: str):
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            "SELECT id, username, full_name, role, disabled FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        connection.close()
+        return dict(row) if row else None
+
+    def list_users(self):
+        """Comptes avec le nombre d'incidents actifs assignés (utile avant une désactivation)."""
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT u.id, u.username, u.full_name, u.role, u.disabled,
+                   (SELECT COUNT(*) FROM tickets t WHERE t.assigned_to = u.username AND t.status != 'CLOSED')
+                       AS active_incidents
+            FROM users u ORDER BY u.disabled, u.role, u.full_name
+            """
+        ).fetchall()
+        connection.close()
+        return [dict(r) for r in rows]
+
+    def create_user(self, username: str, full_name: str, role: str, password_hash: str):
+        connection = sqlite3.connect(self.db_path)
+        connection.execute(
+            "INSERT INTO users (username, full_name, role, password_hash, disabled) VALUES (?, ?, ?, ?, 0)",
+            (username, full_name, role, password_hash),
+        )
+        connection.commit()
+        connection.close()
+
+    def update_user(self, username: str, fields: dict):
+        allowed = {"full_name", "role", "disabled", "password_hash"}
+        fields = {k: v for k, v in fields.items() if k in allowed}
+        if not fields:
+            return 0
+        connection = sqlite3.connect(self.db_path)
+        set_clause = ", ".join(f"{key} = ?" for key in fields)
+        cursor = connection.execute(f"UPDATE users SET {set_clause} WHERE username = ?", [*fields.values(), username])
+        connection.commit()
+        count = cursor.rowcount
+        connection.close()
+        return count
+
+    def count_active_admins(self) -> int:
+        connection = sqlite3.connect(self.db_path)
+        count = connection.execute("SELECT COUNT(*) FROM users WHERE role = 'ADMIN' AND disabled = 0").fetchone()[0]
+        connection.close()
+        return count
+
     # ------------------ AUDIT ------------------
 
     def add_audit_event(self, actor: str, action: str, alert_id: str = None, ticket_id: str = None, details: dict = None):
@@ -379,6 +438,21 @@ class DatabaseManager:
             ORDER BY id
             """,
             (alert_id, alert_id, ticket_id, ticket_id),
+        ).fetchall()
+        connection.close()
+        return [{**dict(r), "details": json.loads(r["details"]) if r["details"] else {}} for r in rows]
+
+    def get_account_events(self, limit: int = 50):
+        """Derniers événements de gestion des comptes (création, rôle, mot de passe, activation)."""
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT occurred_at, actor, action, details FROM audit_events
+            WHERE action LIKE 'USER_%' OR action = 'PASSWORD_RESET'
+            ORDER BY id DESC LIMIT ?
+            """,
+            (limit,),
         ).fetchall()
         connection.close()
         return [{**dict(r), "details": json.loads(r["details"]) if r["details"] else {}} for r in rows]

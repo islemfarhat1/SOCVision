@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Bell, Ticket, Settings, FileText, LogOut } from "lucide-react";
+import { LayoutDashboard, Bell, Ticket, Settings, FileText, LogOut, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, Role } from "@/lib/use-auth";
 import { usePathname } from "next/navigation";
@@ -15,6 +15,7 @@ const ALERTS: NavItem = { label: "Alert queue", icon: Bell, href: "/alerts" };
 const INCIDENTS: NavItem = { label: "Incidents", icon: Ticket, href: "/tickets" };
 const REPORTS: NavItem = { label: "Reports", icon: FileText, href: "/reports" };
 const SETTINGS: NavItem = { label: "Settings", icon: Settings, href: "/settings" };
+const USERS: NavItem = { label: "Users & access", icon: Users, href: "/admin" };
 
 function getNavGroups(role?: Role): NavGroup[] {
   const operations: Record<string, NavItem[]> = {
@@ -26,7 +27,7 @@ function getNavGroups(role?: Role): NavGroup[] {
   if (!role) return [{ title: "Operations", items: [DASHBOARD] }];
   return [
     { title: "Operations", items: operations[role] ?? [DASHBOARD] },
-    { title: "System", items: [SETTINGS] },
+    { title: "System", items: role === "ADMIN" ? [USERS, SETTINGS] : [SETTINGS] },
   ];
 }
 

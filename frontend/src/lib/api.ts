@@ -72,6 +72,11 @@ export async function login(username: string, password: string) {
     const minutes = Math.ceil(Number(res.headers.get("Retry-After") ?? "900") / 60);
     throw new Error(`Too many failed attempts. Try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`);
   }
+  if (res.status === 403) {
+    // Disabled account: the API only says so after a correct password.
+    const body = await res.json().catch(() => null);
+    throw new Error(typeof body?.detail === "string" ? body.detail : "This account is disabled.");
+  }
   if (!res.ok) throw new Error("Invalid credentials. Please check your username and password.");
   return res.json();
 }
@@ -260,3 +265,44 @@ export async function fetchAnalysts(role?: string) {
   if (!res.ok) throw new Error("Failed to fetch analysts");
   return res.json();
 }
+
+// ─── Administration (ADMIN only) ─────────────────────────────────────────────
+
+export type ManagedUser = {
+  id: number;
+  username: string;
+  full_name: string;
+  role: "SOC_L1" | "SOC_L2" | "MANAGER" | "ADMIN";
+  disabled: boolean;
+  active_incidents: number;
+};
+
+export type AccountEvent = {
+  occurred_at: string;
+  actor: string;
+  action: string;
+  details: Record<string, string>;
+};
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}/admin${path}`, { ...init, headers: getHeaders(), cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail;
+    // FastAPI validation errors come as a list
+    const message = typeof detail === "string" ? detail : Array.isArray(detail) ? detail.map((d) => d.msg).join(" · ") : null;
+    throw new Error(message ?? "The request failed.");
+  }
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+export const adminApi = {
+  listUsers: () => adminRequest<ManagedUser[]>("/users"),
+  createUser: (user: { username: string; full_name: string; role: string; password: string }) =>
+    adminRequest<ManagedUser>("/users", { method: "POST", body: JSON.stringify(user) }),
+  updateUser: (username: string, changes: { full_name?: string; role?: string; disabled?: boolean }) =>
+    adminRequest<ManagedUser>(`/users/${encodeURIComponent(username)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  resetPassword: (username: string, password: string) =>
+    adminRequest<void>(`/users/${encodeURIComponent(username)}/password`, { method: "POST", body: JSON.stringify({ password }) }),
+  accountEvents: () => adminRequest<AccountEvent[]>("/audit"),
+};
