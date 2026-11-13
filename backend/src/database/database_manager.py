@@ -65,6 +65,9 @@ class DatabaseManager:
         columns = [info[1] for info in cursor.fetchall()]
         if "wazuh_event_id" not in columns:
             cursor.execute("ALTER TABLE alerts ADD COLUMN wazuh_event_id TEXT")
+        # Points per factor computed by the rule engine when the alert was scored (JSON)
+        if "score_details" not in columns:
+            cursor.execute("ALTER TABLE alerts ADD COLUMN score_details TEXT")
 
         # Nouvelle table des tickets
         cursor.execute("""
@@ -163,9 +166,9 @@ class DatabaseManager:
             summary, reasoning, ioc_assessment, mitre_context,
             recommended_action, confidence, source,
             llm_provider, llm_model, status, assigned_to, investigation_notes,
-            classification, reviewed_by, reviewed_at
+            classification, reviewed_by, reviewed_at, score_details
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             alert.get("wazuh_event_id"),
             alert["alert_id"],
@@ -197,7 +200,8 @@ class DatabaseManager:
             alert.get("investigation_notes"),
             alert.get("classification"),
             alert.get("reviewed_by"),
-            alert.get("reviewed_at")
+            alert.get("reviewed_at"),
+            alert.get("score_details")
         ))
 
         connection.commit()
@@ -225,6 +229,7 @@ class DatabaseManager:
                 dataframe["attack_type"]
                 .str.replace(r"\s+", " ", regex=True)
                 .str.replace("Â–", "-", regex=False)
+                .str.replace("\x96", "\u2013", regex=False)  # cp1252 en dash stored as U+0096 (CICIDS labels)
                 .str.strip()
             )
         return dataframe
@@ -278,7 +283,7 @@ class DatabaseManager:
                a.protocol, a.frequency_count, a.mitre_tactic, a.mitre, a.ip_reputation,
                a.summary, a.reasoning, a.ioc_assessment, a.mitre_context,
                a.recommended_action, a.confidence, a.source, a.llm_provider, a.llm_model,
-               a.investigation_notes, a.classification, a.reviewed_by, a.reviewed_at
+               a.investigation_notes, a.classification, a.reviewed_by, a.reviewed_at, a.score_details
         FROM tickets t
         JOIN alerts a ON t.alert_id = a.alert_id
         """

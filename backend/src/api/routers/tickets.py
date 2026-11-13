@@ -6,6 +6,7 @@ from config.settings import DATABASE_PATH
 from src.database.database_manager import DatabaseManager
 from src.api.models import TicketSchema, TicketUpdateSchema
 from src.dependencies import get_current_user, require_role
+from src.scoring.explain import explain_score
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 db = DatabaseManager()
@@ -53,7 +54,9 @@ def get_ticket(
     row = df[df["ticket_id"] == ticket_id]
     if row.empty:
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} introuvable")
-    return row.to_dict(orient="records")[0]
+    ticket = row.to_dict(orient="records")[0]
+    ticket["score_breakdown"] = explain_score(ticket)
+    return ticket
 
 @router.patch("/{ticket_id}", response_model=TicketSchema)
 def update_ticket(

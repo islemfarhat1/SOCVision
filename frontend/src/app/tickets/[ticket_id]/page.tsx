@@ -20,6 +20,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { useAuth } from "@/lib/use-auth";
 import { IpReputationDisplay } from "@/components/ip-reputation";
 import { IncidentReportDocument } from "@/components/incident-report";
+import { ScoreBreakdown, type ScoreBreakdownData } from "@/components/score-breakdown";
 import { cn } from "@/lib/utils";
 import { SEVERITY_STYLES } from "@/components/severity";
 
@@ -55,6 +56,7 @@ type TicketDetail = {
   source?: string | null;
   llm_provider?: string | null;
   llm_model?: string | null;
+  score_breakdown?: ScoreBreakdownData | null;
 };
 
 type Analyst = { id: number; username: string; full_name: string; role: string };
@@ -364,6 +366,11 @@ export default function TicketDetailPage() {
                           {ticket.investigation_notes || <span className="italic text-muted-foreground">The L1 analyst left no notes.</span>}
                         </p>
                       </section>
+
+                      {/* Why this score (rule engine) */}
+                      {ticket.score_breakdown && (
+                        <ScoreBreakdown data={ticket.score_breakdown} storedSeverity={ticket.severity} />
+                      )}
 
                       {/* AI analysis */}
                       <section className="rounded-lg border border-border bg-card">

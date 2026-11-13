@@ -14,6 +14,7 @@ import { fetchAlert, promoteAlert, dismissAlert, updateAlert, fetchAnalysts } fr
 import { AuthGuard } from "@/components/auth-guard";
 import { useAuth } from "@/lib/use-auth";
 import { IpReputationDisplay } from "@/components/ip-reputation";
+import { ScoreBreakdown, type ScoreBreakdownData } from "@/components/score-breakdown";
 import { SEVERITY_STYLES } from "@/components/severity";
 
 type AlertDetail = {
@@ -46,6 +47,7 @@ type AlertDetail = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   classification: string | null;
+  score_breakdown?: ScoreBreakdownData | null;
 };
 
 // Colour is reserved for severity; statuses stay neutral so they don't compete with it.
@@ -298,8 +300,11 @@ export default function AlertDetailPage() {
                 </section>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  {/* ── 2. AI analysis: what the analyst reads first ── */}
+                  {/* ── 2. Why this score (rule engine), then the AI analysis ── */}
                   <div className="lg:col-span-2 space-y-5">
+                    {alert.score_breakdown && (
+                      <ScoreBreakdown data={alert.score_breakdown} storedSeverity={alert.severity} />
+                    )}
                     <section className="rounded-lg border border-border bg-card">
                       <header className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-border">
                         <h2 className="text-sm font-semibold flex items-center gap-2">
@@ -320,7 +325,7 @@ export default function AlertDetailPage() {
                           <p className="text-sm leading-relaxed">{alert.recommended_action}</p>
                         </div>
 
-                        <AnalysisBlock title="Why this score">{alert.reasoning}</AnalysisBlock>
+                        <AnalysisBlock title="AI commentary on the score">{alert.reasoning}</AnalysisBlock>
                         <AnalysisBlock title="Threat intelligence">{alert.ioc_assessment}</AnalysisBlock>
                         <IpReputationDisplay rawReputation={alert.ip_reputation} />
                       </div>

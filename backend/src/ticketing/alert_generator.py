@@ -49,6 +49,9 @@ class AlertGenerator:
             "severity": alert_obj.priority,
             "attack_type": alert_obj.threat_category,
             "score": alert_obj.score,
+            # Points per factor from the rule engine, kept so the score stays explainable
+            # even if the scoring rules change later.
+            "score_details": json.dumps(alert_obj.score_details) if alert_obj.score_details else None,
             "source_ip": flow.source_ip,
             "destination_ip": flow.destination_ip,
             "source_port": flow.source_port,

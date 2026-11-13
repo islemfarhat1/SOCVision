@@ -8,6 +8,7 @@ from src.database.database_manager import DatabaseManager
 from src.api.models import AlertSchema, AlertUpdateSchema, PromoteAlertSchema
 from src.dependencies import get_current_user, require_role, verify_webhook_token
 from src.utils.notifier import notify_n8n
+from src.scoring.explain import explain_score
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 db = DatabaseManager()
@@ -98,7 +99,9 @@ def get_alert(alert_id: str, current_user: Annotated[dict, Depends(require_role(
     row = df[df["alert_id"] == alert_id]
     if row.empty:
         raise HTTPException(status_code=404, detail=f"Alerte {alert_id} introuvable")
-    return row.to_dict(orient="records")[0]
+    alert = row.to_dict(orient="records")[0]
+    alert["score_breakdown"] = explain_score(alert)
+    return alert
 
 
 @router.patch("/{alert_id}", response_model=AlertSchema)

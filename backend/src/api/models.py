@@ -39,6 +39,8 @@ class AlertSchema(BaseModel):
     classification: Optional[str] = None
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[str] = None
+    # Deterministic explanation of the score (rule engine), on the detail endpoint only
+    score_breakdown: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -79,6 +81,7 @@ class TicketSchema(BaseModel):
     classification: Optional[str] = None
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[str] = None
+    score_breakdown: Optional[dict] = None
 
     class Config:
         from_attributes = True
