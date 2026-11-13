@@ -86,6 +86,16 @@ The GitHub Actions workflow includes:
 
 These checks provide automated security feedback. They do not constitute a complete security assessment or production certification.
 
+## Quick Start (Windows)
+
+After the one-time setup below (Python dependencies, `npm install`, `backend/.env`), start everything with one command from the repository root:
+
+```powershell
+.\start-dev.ps1
+```
+
+or double-click `start-dev.cmd`. The script loads `backend/.env`, opens one window for the API (port 8000) and one for the web app (port 3000), waits until both respond, warns if Ollama is not running, and opens the browser. Close the two windows to stop. `.\start-dev.ps1 -Check` only verifies the configuration.
+
 ## Local Setup
 
 **Backend**
