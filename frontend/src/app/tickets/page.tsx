@@ -12,6 +12,7 @@ import {
 import { fetchTickets, updateTicket, fetchAnalysts, formatTicketId } from "@/lib/api";
 import { AuthGuard } from "@/components/auth-guard";
 import { useAuth, Role } from "@/lib/use-auth";
+import { SEVERITY_STYLES } from "@/components/severity";
 
 type Ticket = {
   id: number;
@@ -29,13 +30,6 @@ type Ticket = {
 };
 
 type Analyst = { id: number; username: string; full_name: string; role: string };
-
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-500/15 text-red-400 border-red-500/30",
-  HIGH: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  MEDIUM: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  LOW: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-};
 
 const TICKET_STATUS_STYLES: Record<string, string> = {
   OPEN: "bg-sky-500/15 text-sky-400 border-sky-500/30",

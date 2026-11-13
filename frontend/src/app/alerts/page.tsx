@@ -15,6 +15,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { ArrowDown, ArrowUp, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
+import { SEVERITY_STYLES } from "@/components/severity";
 
 type Alert = {
   id: number;
@@ -28,14 +29,6 @@ type Alert = {
   destination_ip: string;
   destination_port: number | null;
   status: string;
-};
-
-// Colour is reserved for severity; statuses stay neutral (same rule as the alert page).
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-500/15 text-red-400 border-red-500/30",
-  HIGH: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  MEDIUM: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  LOW: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
 };
 
 const STATUS_LABELS: Record<string, string> = {

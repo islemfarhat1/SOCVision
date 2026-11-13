@@ -16,17 +16,11 @@ import {
   ShieldAlert, Clock, CheckCircle2, FileText, Ticket,
   AlertTriangle, BarChart3, User,
 } from "lucide-react";
+import { SEVERITY_STYLES } from "@/components/severity";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-500/15 text-red-400 border-red-500/30",
-  HIGH: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  MEDIUM: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  LOW: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-};
 
 
 /**
@@ -613,10 +607,10 @@ export default function HomePage() {
   const isManager = user?.role === "MANAGER";
 
   const title =
-    user?.role === "SOC_L1" ? "SOC L1 — Triage Dashboard"
-    : user?.role === "SOC_L2" ? "SOC L2 — Investigation Dashboard"
-    : isManager ? "SOC Manager — Supervision Dashboard"
-    : "Dashboard";
+    user?.role === "SOC_L1" ? "Overview · Triage"
+    : user?.role === "SOC_L2" ? "Overview · Investigation"
+    : isManager ? "Overview · Supervision"
+    : "Overview";
 
   return (
     <AuthGuard>

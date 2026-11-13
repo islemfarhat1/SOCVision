@@ -14,6 +14,7 @@ import { fetchAlert, promoteAlert, dismissAlert, updateAlert, fetchAnalysts } fr
 import { AuthGuard } from "@/components/auth-guard";
 import { useAuth } from "@/lib/use-auth";
 import { IpReputationDisplay } from "@/components/ip-reputation";
+import { SEVERITY_STYLES } from "@/components/severity";
 
 type AlertDetail = {
   alert_id: string;
@@ -45,13 +46,6 @@ type AlertDetail = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   classification: string | null;
-};
-
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-500/15 text-red-400 border-red-500/30",
-  HIGH: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  MEDIUM: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  LOW: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
 };
 
 // Colour is reserved for severity; statuses stay neutral so they don't compete with it.

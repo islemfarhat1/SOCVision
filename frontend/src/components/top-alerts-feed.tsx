@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fetchAlerts } from "@/lib/api";
 import { ArrowUpRight, ShieldAlert, Sparkles } from "lucide-react";
+import { SEVERITY_STYLES } from "@/components/severity";
 
 type Alert = {
   alert_id: string;
@@ -17,13 +18,6 @@ type Alert = {
   destination_ip: string;
   status: string;
   mitre: string | null;
-};
-
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-500/20 text-red-400 border-red-500/40 shadow-sm shadow-red-500/20 animate-pulse",
-  HIGH: "bg-orange-500/20 text-orange-400 border-orange-500/40",
-  MEDIUM: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
-  LOW: "bg-green-500/20 text-green-400 border-green-500/40",
 };
 
 const STATUS_STYLES: Record<string, string> = {

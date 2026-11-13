@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/use-auth";
 import { IpReputationDisplay } from "@/components/ip-reputation";
 import { IncidentReportDocument } from "@/components/incident-report";
 import { cn } from "@/lib/utils";
+import { SEVERITY_STYLES } from "@/components/severity";
 
 type TicketDetail = {
   id: number;
@@ -58,14 +59,6 @@ type TicketDetail = {
 
 type Analyst = { id: number; username: string; full_name: string; role: string };
 type Notice = { kind: "success" | "error"; text: string };
-
-// Colour is reserved for severity (same rule as the alert pages).
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-500/15 text-red-400 border-red-500/30",
-  HIGH: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  MEDIUM: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  LOW: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-};
 
 const STATUS_LABELS: Record<string, string> = {
   OPEN: "Open",

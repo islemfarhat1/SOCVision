@@ -13,6 +13,7 @@ import { FileText, ArrowLeft, History, Shield, User, Clock, AlertCircle } from "
 import { fetchTickets, fetchTicket, fetchIncidentReports, IncidentReport, formatTicketId } from "@/lib/api";
 import { AuthGuard } from "@/components/auth-guard";
 import { IncidentReportDocument } from "@/components/incident-report";
+import { SEVERITY_STYLES } from "@/components/severity";
 
 type Ticket = {
   ticket_id: string;
@@ -24,13 +25,6 @@ type Ticket = {
   assigned_to: string | null;
   status: string;
   ticket_created_at: string;
-};
-
-const SEVERITY_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-500/15 text-red-500 border-red-500/30",
-  HIGH: "bg-orange-500/15 text-orange-500 border-orange-500/30",
-  MEDIUM: "bg-yellow-500/15 text-yellow-500 border-yellow-500/30",
-  LOW: "bg-green-500/15 text-green-500 border-green-500/30",
 };
 
 const STATUS_STYLES: Record<string, string> = {

@@ -245,7 +245,7 @@ body { margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
 .mono { font-family: Consolas, "Courier New", monospace; }
 .report-sev { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 8.5pt; border: 1px solid; }
 .sev-critical { color: #b91c1c; border-color: #b91c1c; } .sev-high { color: #c2410c; border-color: #c2410c; }
-.sev-medium { color: #a16207; border-color: #a16207; } .sev-low { color: #15803d; border-color: #15803d; }
+.sev-medium { color: #a16207; border-color: #a16207; } .sev-low { color: #475569; border-color: #475569; }
 .report-disclaimer { display: flex; gap: 8px; padding: 8px 12px; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 6px; font-size: 9pt; }
 .report-disclaimer p { margin: 0; }
 .report-disclaimer-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; color: #b45309; }

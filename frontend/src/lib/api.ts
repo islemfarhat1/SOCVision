@@ -20,6 +20,17 @@ export type IncidentReport = {
   version: number;
 };
 
+// ─── System ──────────────────────────────────────────────────────────────────
+
+export type ApiHealth = { status: "healthy" | "degraded"; database: string; timestamp: string };
+
+/** Real API + database status (GET /api/health, no authentication required). */
+export async function fetchHealth(): Promise<ApiHealth> {
+  const res = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
+  if (!res.ok) throw new Error("API unavailable");
+  return res.json();
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export async function login(username: string, password: string) {
