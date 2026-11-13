@@ -14,7 +14,7 @@ def get_users(
     current_user: Annotated[dict, Depends(get_current_user)],
     role: Optional[str] = Query(None, description="Filtrer par rôle, ex: SOC_L1,SOC_L2")
 ):
-    """Retourne la liste des analystes/utilisateurs, filtrable par rôle."""
+    """Comptes actifs (pour l'assignation), filtrables par rôle. Les comptes désactivés sont exclus."""
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -22,9 +22,11 @@ def get_users(
     if role:
         roles = [r.strip() for r in role.split(",")]
         placeholders = ",".join("?" for _ in roles)
-        cursor.execute(f"SELECT id, username, full_name, role FROM users WHERE role IN ({placeholders})", roles)
+        cursor.execute(
+            f"SELECT id, username, full_name, role FROM users WHERE disabled = 0 AND role IN ({placeholders})", roles
+        )
     else:
-        cursor.execute("SELECT id, username, full_name, role FROM users")
+        cursor.execute("SELECT id, username, full_name, role FROM users WHERE disabled = 0")
 
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()

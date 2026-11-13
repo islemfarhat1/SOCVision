@@ -12,6 +12,12 @@ class VirusTotalClient:
 
 
     def check_ip(self, ip):
+        """Retourne les données, ou None en cas d'échec (raison dans self.last_error)."""
+        self.last_error = None
+
+        if not VIRUSTOTAL_API_KEY:
+            self.last_error = "API key not configured"
+            return None
 
         headers = {
             "x-apikey": VIRUSTOTAL_API_KEY
@@ -28,6 +34,8 @@ class VirusTotalClient:
             )
 
             if response.status_code != 200:
+
+                self.last_error = f"HTTP {response.status_code}"
 
                 return None
 
@@ -51,6 +59,6 @@ class VirusTotalClient:
 
         except Exception as e:
 
-            print("VirusTotal Error :", e)
+            self.last_error = f"{type(e).__name__}: {e}"
 
             return None

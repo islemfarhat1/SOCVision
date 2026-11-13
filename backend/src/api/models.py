@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -39,6 +39,8 @@ class AlertSchema(BaseModel):
     classification: Optional[str] = None
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[str] = None
+    # Deterministic explanation of the score (rule engine), on the detail endpoint only
+    score_breakdown: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -79,6 +81,7 @@ class TicketSchema(BaseModel):
     classification: Optional[str] = None
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[str] = None
+    score_breakdown: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -97,7 +100,7 @@ class PromoteAlertSchema(BaseModel):
 class TicketUpdateSchema(BaseModel):
     status: Optional[str] = None
     assigned_to: Optional[str] = None
-    comments: Optional[str] = None
+    comments: Optional[str] = Field(default=None, max_length=10000)
 
 class IncidentReportSchema(BaseModel):
     id: int

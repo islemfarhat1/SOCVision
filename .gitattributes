@@ -1,0 +1,5 @@
+# Wazuh integration script runs on Linux: keep LF line endings
+backend/wazuh_lab/custom-soc-ai text eol=lf
+# Windows launch scripts keep CRLF line endings
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

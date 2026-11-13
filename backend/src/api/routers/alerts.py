@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Response
 from typing import Optional, Annotated
 from datetime import datetime
 import sqlite3
@@ -6,47 +6,72 @@ import sqlite3
 from config.settings import DATABASE_PATH
 from src.database.database_manager import DatabaseManager
 from src.api.models import AlertSchema, AlertUpdateSchema, PromoteAlertSchema
-from src.dependencies import get_current_user, require_role
+from src.dependencies import get_current_user, require_role, verify_webhook_token
 from src.utils.notifier import notify_n8n
+from src.scoring.explain import explain_score
+from src.audit.timeline import build_timeline
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 db = DatabaseManager()
 
+ALERT_STATUSES = ("NEW", "UNDER_REVIEW", "ESCALATED", "DISMISSED")
+SEARCH_FIELDS = ("source_ip", "destination_ip", "incident_title", "alert_id", "attack_type")
+SORT_FIELDS = {"id", "score", "created_at"}
+
+ReadRoles = Annotated[dict, Depends(require_role("SOC_L1", "MANAGER", "ADMIN"))]
+
+
 def _clean(df):
     return df.astype(object).where(df.notnull(), None)
 
+
+def _filter_alerts(df, severity=None, attack_type=None, source=None, search=None):
+    """Filtres communs à la liste et aux compteurs (le statut est traité à part)."""
+    if severity:
+        severities = [s.strip().upper() for s in severity.split(",") if s.strip()]
+        df = df[df["severity"].isin(severities)]
+    if attack_type:
+        df = df[df["attack_type"].str.contains(attack_type, case=False, na=False, regex=False)]
+    if source:
+        df = df[df["source"].str.lower() == source.lower()]
+    if search:
+        term = search.strip()
+        # regex=False : le texte saisi est cherché tel quel (pas d'expression régulière,
+        # donc pas d'erreur sur "(" ni de motif coûteux).
+        mask = False
+        for field in SEARCH_FIELDS:
+            mask = mask | df[field].astype(str).str.contains(term, case=False, na=False, regex=False)
+        df = df[mask]
+    return df
+
+
 @router.get("", response_model=list[AlertSchema])
 def get_alerts(
-    current_user: Annotated[dict, Depends(require_role("SOC_L1", "ADMIN"))],
+    current_user: ReadRoles,
+    response: Response,
     severity: Optional[str] = None,
     attack_type: Optional[str] = None,
-    status: Optional[str] = None,
+    status: Optional[str] = Query(None, description="Un ou plusieurs statuts séparés par des virgules"),
     source: Optional[str] = Query(None, description="Filtrer par source : cicids ou wazuh"),
-    search: Optional[str] = Query(None, description="Recherche libre sur les IP"),
+    search: Optional[str] = Query(None, description="Recherche dans les IP, le titre, l'ID et le type d'attaque"),
     sort: str = Query("id", description="Champ de tri: id, score, created_at"),
     order: str = Query("desc", description="asc ou desc"),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
 ):
-    """Retourne la file des alertes SOC."""
-    df = db.get_alerts_dataframe()
+    """Retourne la file des alertes SOC. Le nombre total est dans l'en-tête X-Total-Count."""
+    df = _filter_alerts(db.get_alerts_dataframe(), severity, attack_type, source, search)
 
-    if severity:
-        df = df[df["severity"] == severity.upper()]
-    if attack_type:
-        df = df[df["attack_type"].str.contains(attack_type, case=False, na=False)]
     if status:
-        df = df[df["status"] == status.upper()]
-    if source:
-        df = df[df["source"].str.lower() == source.lower()]
-    if search:
-        df = df[
-            df["source_ip"].str.contains(search, na=False)
-            | df["destination_ip"].str.contains(search, na=False)
-        ]
+        statuses = [s.strip().upper() for s in status.split(",") if s.strip()]
+        df = df[df["status"].isin(statuses)]
 
-    if sort in df.columns:
-        df = df.sort_values(sort, ascending=(order == "asc"))
+    if sort in SORT_FIELDS:
+        ascending = order == "asc"
+        # "id" en second critère : ordre stable entre deux rafraîchissements
+        df = df.sort_values([sort, "id"], ascending=[ascending, ascending])
+
+    response.headers["X-Total-Count"] = str(len(df))
 
     start = (page - 1) * size
     df = df.iloc[start:start + size]
@@ -55,13 +80,29 @@ def get_alerts(
     return df.to_dict(orient="records")
 
 
+@router.get("/status-counts")
+def get_alert_status_counts(
+    current_user: ReadRoles,
+    severity: Optional[str] = None,
+    attack_type: Optional[str] = None,
+    source: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    """Nombre d'alertes par statut, avec les mêmes filtres que la liste (pour les onglets)."""
+    df = _filter_alerts(db.get_alerts_dataframe(), severity, attack_type, source, search)
+    counts = df["status"].value_counts()
+    return {status: int(counts.get(status, 0)) for status in ALERT_STATUSES}
+
+
 @router.get("/{alert_id}", response_model=AlertSchema)
-def get_alert(alert_id: str, current_user: Annotated[dict, Depends(require_role("SOC_L1", "ADMIN"))]):
+def get_alert(alert_id: str, current_user: Annotated[dict, Depends(require_role("SOC_L1", "MANAGER", "ADMIN"))]):
     df = _clean(db.get_alerts_dataframe())
     row = df[df["alert_id"] == alert_id]
     if row.empty:
         raise HTTPException(status_code=404, detail=f"Alerte {alert_id} introuvable")
-    return row.to_dict(orient="records")[0]
+    alert = row.to_dict(orient="records")[0]
+    alert["score_breakdown"] = explain_score(alert)
+    return alert
 
 
 @router.patch("/{alert_id}", response_model=AlertSchema)
@@ -73,9 +114,11 @@ def update_alert(
     """
     Permet à un analyste de changer le statut d'une alerte (ex: DISMISSED, UNDER_REVIEW).
     """
-    df = db.get_alerts_dataframe()
-    if alert_id not in df["alert_id"].values:
+    df = _clean(db.get_alerts_dataframe())
+    match = df[df["alert_id"] == alert_id]
+    if match.empty:
         raise HTTPException(status_code=404, detail="Alerte introuvable")
+    before = match.to_dict(orient="records")[0]
 
     fields = {}
     if update.status:
@@ -89,10 +132,31 @@ def update_alert(
         fields["classification"] = update.classification
 
     db.update_alert(alert_id, fields)
-    
+
+    actor = current_user.get("username")
+    if "status" in fields and fields["status"] != before.get("status"):
+        action = {"UNDER_REVIEW": "ALERT_TRIAGE_STARTED", "DISMISSED": "ALERT_DISMISSED"}.get(fields["status"], "ALERT_STATUS_CHANGED")
+        db.add_audit_event(actor, action, alert_id=alert_id, details={"from": before.get("status"), "to": fields["status"]})
+    if "investigation_notes" in fields and fields["investigation_notes"] != (before.get("investigation_notes") or ""):
+        db.add_audit_event(actor, "ALERT_NOTES_UPDATED", alert_id=alert_id,
+                           details={"length": len(fields["investigation_notes"] or "")})
+    if "classification" in fields and fields["classification"] != before.get("classification"):
+        db.add_audit_event(actor, "ALERT_CLASSIFIED", alert_id=alert_id,
+                           details={"from": before.get("classification"), "to": fields["classification"]})
+
     df = _clean(db.get_alerts_dataframe())
     row = df[df["alert_id"] == alert_id]
     return row.to_dict(orient="records")[0]
+
+
+@router.get("/{alert_id}/timeline")
+def get_alert_timeline(alert_id: str, current_user: ReadRoles):
+    """Chronologie de l'alerte : actions enregistrées + étapes reconstruites pour les données anciennes."""
+    df = _clean(db.get_alerts_dataframe())
+    row = df[df["alert_id"] == alert_id]
+    if row.empty:
+        raise HTTPException(status_code=404, detail=f"Alerte {alert_id} introuvable")
+    return build_timeline(row.to_dict(orient="records")[0], db.get_audit_events(alert_id=alert_id))
 
 
 @router.post("/{alert_id}/promote")
@@ -107,7 +171,7 @@ def promote_alert(
     # 0. Vérifier que l'utilisateur assigné est bien un SOC_L2
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT role FROM users WHERE username = ?", (payload.assigned_to,))
+    cursor.execute("SELECT role FROM users WHERE username = ? AND disabled = 0", (payload.assigned_to,))
     user_row = cursor.fetchone()
     conn.close()
     
@@ -149,10 +213,15 @@ def promote_alert(
     # 4. Envoyer l'email n8n (on passe l'alerte d'origine enrichie du ticket_id)
     alert_dict["ticket_id"] = ticket_id
     alert_dict["assigned_to"] = payload.assigned_to
+    db.add_audit_event(current_user.get("username"), "ALERT_ESCALATED", alert_id=alert_id, ticket_id=ticket_id,
+                       details={"assigned_to": payload.assigned_to})
     try:
-        notify_n8n(alert_dict)
+        notification = notify_n8n(alert_dict)
     except Exception as e:
         print(f"Erreur notification n8n: {e}")
+        notification = {"status": "failed", "error": type(e).__name__}
+    db.add_audit_event("system", f"NOTIFICATION_{notification['status'].upper()}", alert_id=alert_id,
+                       ticket_id=ticket_id, details={"channel": "n8n", **{k: v for k, v in notification.items() if k != "status"}})
 
     return {"message": "Incident créé avec succès", "ticket_id": ticket_id}
 from typing import Dict, Any
@@ -166,7 +235,7 @@ from src.ticketing.alert_generator import AlertGenerator
 from wazuh_lab.normalize_alerts import normalize, is_noise
 import uuid
 
-@router.post('/wazuh/webhook')
+@router.post('/wazuh/webhook', dependencies=[Depends(verify_webhook_token)])
 def receive_wazuh_webhook(payload: Dict[Any, Any]):
     agent_name = payload.get('agent', {}).get('name', 'unknown')
     rule_id = payload.get('rule', {}).get('id', 'unknown')
@@ -197,6 +266,8 @@ def receive_wazuh_webhook(payload: Dict[Any, Any]):
     
     alert_dict = alert_generator.create_alert(alert_obj)
     db.insert_alert(alert_dict)
+    db.add_audit_event("wazuh-webhook", "ALERT_RECEIVED", alert_id=alert_dict["alert_id"],
+                       details={"source": "wazuh", "score": alert_dict["score"], "severity": alert_dict["severity"]})
 
     print(f"[WEBHOOK] [OK] NOUVELLE ALERTE INSÉRÉE EN BD: {alert_dict['alert_id']} ({alert_dict['attack_type']}) - Score: {alert_dict['score']}")
 

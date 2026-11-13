@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 import uuid
 
@@ -48,6 +49,9 @@ class AlertGenerator:
             "severity": alert_obj.priority,
             "attack_type": alert_obj.threat_category,
             "score": alert_obj.score,
+            # Points per factor from the rule engine, kept so the score stays explainable
+            # even if the scoring rules change later.
+            "score_details": json.dumps(alert_obj.score_details) if alert_obj.score_details else None,
             "source_ip": flow.source_ip,
             "destination_ip": flow.destination_ip,
             "source_port": flow.source_port,
@@ -56,7 +60,7 @@ class AlertGenerator:
             "frequency_count": alert_obj.frequency_count,
             "mitre_tactic": alert_obj.mitre_tactic,
             "mitre": alert_obj.mitre_technique,
-            "ip_reputation": str(alert_obj.ip_reputation) if alert_obj.ip_reputation else None,
+            "ip_reputation": json.dumps(alert_obj.ip_reputation) if alert_obj.ip_reputation else None,
             "summary": alert_obj.summary,
             "reasoning": alert_obj.reasoning,
             "ioc_assessment": alert_obj.ioc_assessment,
@@ -64,8 +68,8 @@ class AlertGenerator:
             "recommended_action": alert_obj.recommended_action,
             "confidence": alert_obj.confidence,
             "source": "wazuh" if alert_obj.event_type == "wazuh" else "cicids",
-            "llm_provider": "ollama",
-            "llm_model": "qwen2.5:7b",
+            "llm_provider": alert_obj.llm_provider or "none",
+            "llm_model": alert_obj.llm_model or "unavailable",
             "status": "NEW",
             "assigned_to": None,
         }

@@ -14,7 +14,8 @@ def main():
         sys.exit(1)
 
     alert_file_path = sys.argv[1]
-    # api_key = sys.argv[2] (non utilisé ici)
+    # <api_key> de l'intégration Wazuh = secret partagé du webhook (WAZUH_WEBHOOK_TOKEN)
+    webhook_token = sys.argv[2]
     hook_url = sys.argv[3] if len(sys.argv) > 3 else "http://192.168.172.1:8000/api/alerts/wazuh/webhook"
 
     # 1. Lecture du fichier JSON contenant l'alerte Wazuh
@@ -31,7 +32,11 @@ def main():
         req = urllib.request.Request(
             hook_url,
             data=json_payload,
-            headers={"Content-Type": "application/json", "User-Agent": "Wazuh-Integratord"}
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Wazuh-Integratord",
+                "X-Webhook-Token": webhook_token,
+            }
         )
 
         # 3. Envoi au Webhook FastAPI

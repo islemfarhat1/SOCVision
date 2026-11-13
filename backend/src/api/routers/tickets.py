@@ -1,15 +1,41 @@
+import sqlite3
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Annotated
 
+from config.settings import DATABASE_PATH
 from src.database.database_manager import DatabaseManager
 from src.api.models import TicketSchema, TicketUpdateSchema
 from src.dependencies import get_current_user, require_role
+from src.scoring.explain import explain_score
+from src.audit.timeline import build_timeline
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 db = DatabaseManager()
 
+TICKET_STATUSES = {"OPEN", "IN_PROGRESS", "CLOSED"}
+
+
 def _clean(df):
     return df.astype(object).where(df.notnull(), None)
+
+
+def _ensure_can_modify(ticket: dict, current_user: dict) -> None:
+    """
+    Un SOC L2 ne peut modifier que les tickets qui lui sont assignés.
+    L'ADMIN peut tout modifier. La lecture reste ouverte à tous les rôles autorisés.
+    """
+    if current_user.get("role") == "ADMIN":
+        return
+    if ticket.get("assigned_to") != current_user.get("username"):
+        raise HTTPException(status_code=403, detail="This incident is assigned to another analyst.")
+
+
+def _ensure_l2_analyst(username: str) -> None:
+    conn = sqlite3.connect(DATABASE_PATH)
+    row = conn.execute("SELECT role FROM users WHERE username = ? AND disabled = 0", (username,)).fetchone()
+    conn.close()
+    if not row or row[0] != "SOC_L2":
+        raise HTTPException(status_code=400, detail="An incident can only be assigned to an existing SOC L2 analyst.")
 
 @router.get("", response_model=list[TicketSchema])
 def get_tickets(
@@ -29,7 +55,9 @@ def get_ticket(
     row = df[df["ticket_id"] == ticket_id]
     if row.empty:
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} introuvable")
-    return row.to_dict(orient="records")[0]
+    ticket = row.to_dict(orient="records")[0]
+    ticket["score_breakdown"] = explain_score(ticket)
+    return ticket
 
 @router.patch("/{ticket_id}", response_model=TicketSchema)
 def update_ticket(
@@ -43,16 +71,33 @@ def update_ticket(
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} introuvable")
 
     current_ticket = row.to_dict(orient="records")[0]
+    _ensure_can_modify(current_ticket, current_user)
 
     fields = {}
     if update.status:
-        fields["status"] = update.status.upper()
+        status = update.status.upper()
+        if status not in TICKET_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {', '.join(sorted(TICKET_STATUSES))}")
+        fields["status"] = status
     if update.assigned_to is not None:
+        _ensure_l2_analyst(update.assigned_to)
         fields["assigned_to"] = update.assigned_to
     if update.comments is not None:
         fields["comments"] = update.comments
 
     db.update_ticket(ticket_id, fields)
+
+    actor = current_user.get("username")
+    alert_id = current_ticket.get("alert_id")
+    if "status" in fields and fields["status"] != current_ticket.get("status"):
+        db.add_audit_event(actor, "TICKET_STATUS_CHANGED", alert_id=alert_id, ticket_id=ticket_id,
+                           details={"from": current_ticket.get("status"), "to": fields["status"]})
+    if "assigned_to" in fields and fields["assigned_to"] != current_ticket.get("assigned_to"):
+        db.add_audit_event(actor, "TICKET_REASSIGNED", alert_id=alert_id, ticket_id=ticket_id,
+                           details={"from": current_ticket.get("assigned_to"), "to": fields["assigned_to"]})
+    if "comments" in fields and fields["comments"] != (current_ticket.get("comments") or ""):
+        db.add_audit_event(actor, "TICKET_NOTES_UPDATED", alert_id=alert_id, ticket_id=ticket_id,
+                           details={"length": len(fields["comments"] or "")})
 
     df_updated = _clean(db.get_tickets_dataframe())
     updated_row = df_updated[df_updated["ticket_id"] == ticket_id]
@@ -75,6 +120,7 @@ def generate_report(
         raise HTTPException(status_code=404, detail="Ticket introuvable")
     
     ticket_data = row.to_dict(orient="records")[0]
+    _ensure_can_modify(ticket_data, current_user)
     
     # Récupérer l'alerte d'origine complète (le join de get_tickets_dataframe ne contient pas tout)
     alert_id = ticket_data["alert_id"]
@@ -85,6 +131,11 @@ def generate_report(
     # Générer le rapport via le LLM
     llm = LLMService()
     report_content = llm.generate_incident_report(ticket_data, alert_data)
+    if not report_content:
+        raise HTTPException(
+            status_code=503,
+            detail="No LLM model is available to generate the report. Check Ollama and try again.",
+        )
     
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     generated_by = current_user.get("username", "System")
@@ -95,6 +146,26 @@ def generate_report(
     # Récupérer la ligne insérée
     reports = db.get_incident_reports(ticket_id)
     return reports[0]
+
+@router.get("/{ticket_id}/timeline")
+def get_ticket_timeline(
+    ticket_id: str,
+    current_user: Annotated[dict, Depends(require_role("SOC_L2", "MANAGER", "ADMIN"))]
+):
+    """Chronologie complète de l'incident : de la réception de l'alerte au dernier rapport."""
+    df = _clean(db.get_tickets_dataframe())
+    row = df[df["ticket_id"] == ticket_id]
+    if row.empty:
+        raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} introuvable")
+    ticket = row.to_dict(orient="records")[0]
+
+    alerts = _clean(db.get_alerts_dataframe())
+    alert_row = alerts[alerts["alert_id"] == ticket["alert_id"]]
+    alert = alert_row.to_dict(orient="records")[0] if not alert_row.empty else None
+
+    recorded = db.get_audit_events(alert_id=ticket["alert_id"], ticket_id=ticket_id)
+    return build_timeline(alert, recorded, ticket=ticket, reports=db.get_incident_reports(ticket_id))
+
 
 @router.get("/{ticket_id}/reports", response_model=list[IncidentReportSchema])
 def get_reports(

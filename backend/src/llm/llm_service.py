@@ -2,7 +2,31 @@ import re
 
 from src.llm.prompt_builder import PromptBuilder
 from src.llm.openrouter_client import OpenRouterClient
+
+REPORT_SYSTEM_PROMPT = (
+    "You are a senior SOC analyst writing an incident report. "
+    "Answer in Markdown, following exactly the section structure requested. "
+    "Never answer in JSON. Use only the evidence provided."
+)
+REPORT_MAX_TOKENS = 2500
 from src.llm.response_parser import ResponseParser
+
+_FENCE = re.compile(r"^\s*```[a-zA-Z]*[ \t]*\n(.*?)\n?```\s*$", re.DOTALL)
+_OPEN_FENCE = re.compile(r"^\s*```(?:markdown|md)?[ \t]*\n", re.IGNORECASE)
+
+
+def strip_code_fence(text: str | None) -> str | None:
+    """
+    Les modèles entourent souvent le rapport de ```markdown ... ```, ce qui le
+    ferait afficher comme un bloc de code. On retire cette enveloppe (même si
+    la fermeture manque parce que la réponse a été tronquée).
+    """
+    if not text:
+        return text
+    match = _FENCE.match(text)
+    if match:
+        return match.group(1).strip()
+    return _OPEN_FENCE.sub("", text, count=1).strip()
 
 MITRE_PATTERN = re.compile(r"T\d{4}(\.\d{3})?")
 
@@ -11,9 +35,6 @@ class LLMService:
     """
     Orchestration complète du pipeline LLM.
     """
-
-    LLM_PROVIDER = "ollama"
-    LLM_MODEL = "qwen2.5:7b"
 
     def __init__(self):
         self.prompt_builder = PromptBuilder()
@@ -95,7 +116,18 @@ class LLMService:
 
         rep = getattr(alert, "ip_reputation", None) or {}
         sources = rep.get("sources", {})
-        if is_private_ip or sources.get("External reputation") == "Not applicable":
+        rep_status = self.prompt_builder._get_assessment_status(rep or None)
+        clean_claims = ["clean", "safe", "benign", "no malicious", "not malicious", "good reputation"]
+
+        if rep_status == "NOT_CHECKED" and not is_private_ip:
+            # Lookup TI en échec : le LLM ne doit pas conclure que l'IP est propre.
+            if not ioc_assessment or any(p in ioc_assessment.lower() for p in clean_claims):
+                ioc_assessment = (
+                    "The reputation of the source IP could not be verified: the external "
+                    "threat-intelligence services (VirusTotal, AbuseIPDB) did not answer. "
+                    "The IP must not be considered clean; re-check its reputation manually."
+                )
+        elif is_private_ip or sources.get("External reputation") == "Not applicable":
             hallucination_phrases = ["clean according to", "clean on virustotal", "clean in abuseipdb", "virustotal and abuseipdb", "reputation is clean"]
             if any(p in ioc_assessment.lower() for p in hallucination_phrases) or not ioc_assessment:
                 ioc_assessment = (
@@ -120,6 +152,8 @@ class LLMService:
 
         prompt = self.prompt_builder.build(alert)
         response = self.client.generate(prompt)
+        alert.llm_provider = self.client.last_provider
+        alert.llm_model = self.client.last_model
 
         print("\n========== RAW RESPONSE ==========")
         print(response)
@@ -147,12 +181,15 @@ class LLMService:
 
         return alert
 
-    def generate_incident_report(self, ticket: dict, alert: dict) -> str:
+    def generate_incident_report(self, ticket: dict, alert: dict) -> str | None:
+        """Retourne le rapport Markdown, ou None si aucun modèle n'a répondu."""
         prompt = self.prompt_builder.build_incident_report_prompt(ticket, alert)
-        response = self.client.generate(prompt)
+        response = self.client.generate(
+            prompt, system_prompt=REPORT_SYSTEM_PROMPT, max_tokens=REPORT_MAX_TOKENS
+        )
 
         print("\n========== GENERATED REPORT ==========")
         print(response)
         print("======================================\n")
 
-        return response
+        return strip_code_fence(response)

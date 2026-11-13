@@ -78,12 +78,23 @@ The prototype also includes n8n automation integrations and a GitHub Actions CI 
 
 The GitHub Actions workflow includes:
 
-- Backend unit testing with Pytest.
+- Backend unit tests with Pytest (API filters, authentication and roles, webhook security, threat-intelligence failure handling, LLM prompt safeguards), run against a throw-away database without external API calls.
+- Frontend type checking, ESLint (no warnings allowed) and Next.js production build.
 - Secret detection with Gitleaks.
 - Static application security testing with Semgrep.
 - Dependency vulnerability scanning with Trivy.
 
 These checks provide automated security feedback. They do not constitute a complete security assessment or production certification.
+
+## Quick Start (Windows)
+
+After the one-time setup below (Python dependencies, `npm install`, `backend/.env`), start everything with one command from the repository root:
+
+```powershell
+.\start-dev.ps1
+```
+
+or double-click `start-dev.cmd`. The script loads `backend/.env`, opens one window for the API (port 8000) and one for the web app (port 3000), waits until both respond, warns if Ollama is not running, and opens the browser. Close the two windows to stop. `.\start-dev.ps1 -Check` only verifies the configuration.
 
 ## Local Setup
 
@@ -99,6 +110,15 @@ Configure the required environment variables listed in `backend/.env.example`, i
 ```bash
 python -m uvicorn src.api.main:app --reload
 ```
+
+Run the unit tests:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Scripts in `backend/tests/` that call the real VirusTotal, AbuseIPDB or LLM services, or need the CICIDS2017 dataset, are manual checks: they are listed in `tests/conftest.py`, skipped by pytest, and can be run directly with `python tests/<file>.py`.
 
 **Frontend**
 

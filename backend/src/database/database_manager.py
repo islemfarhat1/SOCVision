@@ -1,6 +1,10 @@
+import json
+import os
 import sqlite3
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
+
+from config.settings import DATABASE_PATH
 
 
 class DatabaseManager:
@@ -8,8 +12,12 @@ class DatabaseManager:
     Gestionnaire SQLite pour le SOC (Alertes et Tickets).
     """
 
-    def __init__(self, db_path="database/soc_alerts.db"):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        # Même base que le reste de l'API (auth, users…) : DATABASE_PATH
+        self.db_path = db_path or DATABASE_PATH
+        parent = os.path.dirname(self.db_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self.create_tables()
 
     def create_tables(self):
@@ -58,6 +66,9 @@ class DatabaseManager:
         columns = [info[1] for info in cursor.fetchall()]
         if "wazuh_event_id" not in columns:
             cursor.execute("ALTER TABLE alerts ADD COLUMN wazuh_event_id TEXT")
+        # Points per factor computed by the rule engine when the alert was scored (JSON)
+        if "score_details" not in columns:
+            cursor.execute("ALTER TABLE alerts ADD COLUMN score_details TEXT")
 
         # Nouvelle table des tickets
         cursor.execute("""
@@ -84,6 +95,21 @@ class DatabaseManager:
         )
         """)
 
+        # Journal d'audit (append-only) : qui a fait quoi, quand, sur quelle alerte / quel incident
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurred_at TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            action TEXT NOT NULL,
+            alert_id TEXT,
+            ticket_id TEXT,
+            details TEXT
+        )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_alert ON audit_events(alert_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_ticket ON audit_events(ticket_id)")
+
         # Table des utilisateurs SOC
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -95,17 +121,32 @@ class DatabaseManager:
         )
         """)
 
+        # Comptes désactivés : conservés pour la traçabilité, mais plus de connexion possible
+        cursor.execute("PRAGMA table_info(users)")
+        if "disabled" not in [info[1] for info in cursor.fetchall()]:
+            cursor.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+
         # Seed users
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             import bcrypt
-            hashed = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode("utf-8")
+            import secrets
+            from config.settings import SEED_USER_PASSWORD
+
+            seed_password = SEED_USER_PASSWORD
+            if not seed_password:
+                seed_password = secrets.token_urlsafe(12)
+                print(
+                    "\n[SECURITY] Demo accounts created with a generated password: "
+                    f"{seed_password}\n"
+                    "           Set SEED_USER_PASSWORD to choose it. This is shown only once.\n"
+                )
+            hashed = bcrypt.hashpw(seed_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
             default_users = [
                 ("ahmed.salem",    "Ahmed Salem",      "SOC_L1",  hashed),
                 ("sarra.bannour",  "Sarra Bannour",    "SOC_L1",  hashed),
                 ("ala.mabrouk",    "Ala Mabrouk",      "SOC_L2",  hashed),
                 ("ahlem.benahmed", "Ahlem Ben Ahmed",  "SOC_L2",  hashed),
-                ("youssef.gharbi", "Youssef Gharbi",   "SOC_L3",  hashed),
                 ("mariem.trabelsi","Mariem Trabelsi",  "MANAGER", hashed),
                 ("karim.bouazizi", "Karim Bouazizi",   "ADMIN",   hashed),
             ]
@@ -113,6 +154,9 @@ class DatabaseManager:
                 "INSERT INTO users (username, full_name, role, password_hash) VALUES (?, ?, ?, ?)",
                 default_users
             )
+
+        # Migration : le rôle SOC_L3 a été retiré du périmètre du projet
+        cursor.execute("DELETE FROM users WHERE role = 'SOC_L3'")
 
         connection.commit()
         connection.close()
@@ -143,9 +187,9 @@ class DatabaseManager:
             summary, reasoning, ioc_assessment, mitre_context,
             recommended_action, confidence, source,
             llm_provider, llm_model, status, assigned_to, investigation_notes,
-            classification, reviewed_by, reviewed_at
+            classification, reviewed_by, reviewed_at, score_details
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             alert.get("wazuh_event_id"),
             alert["alert_id"],
@@ -177,7 +221,8 @@ class DatabaseManager:
             alert.get("investigation_notes"),
             alert.get("classification"),
             alert.get("reviewed_by"),
-            alert.get("reviewed_at")
+            alert.get("reviewed_at"),
+            alert.get("score_details")
         ))
 
         connection.commit()
@@ -205,6 +250,7 @@ class DatabaseManager:
                 dataframe["attack_type"]
                 .str.replace(r"\s+", " ", regex=True)
                 .str.replace("Â–", "-", regex=False)
+                .str.replace("\x96", "\u2013", regex=False)  # cp1252 en dash stored as U+0096 (CICIDS labels)
                 .str.strip()
             )
         return dataframe
@@ -258,7 +304,7 @@ class DatabaseManager:
                a.protocol, a.frequency_count, a.mitre_tactic, a.mitre, a.ip_reputation,
                a.summary, a.reasoning, a.ioc_assessment, a.mitre_context,
                a.recommended_action, a.confidence, a.source, a.llm_provider, a.llm_model,
-               a.investigation_notes, a.classification, a.reviewed_by, a.reviewed_at
+               a.investigation_notes, a.classification, a.reviewed_by, a.reviewed_at, a.score_details
         FROM tickets t
         JOIN alerts a ON t.alert_id = a.alert_id
         """
@@ -308,3 +354,105 @@ class DatabaseManager:
                 "version": r[5]
             } for r in rows
         ]
+
+    # ------------------ USERS ------------------
+
+    def get_user(self, username: str):
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            "SELECT id, username, full_name, role, disabled FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        connection.close()
+        return dict(row) if row else None
+
+    def list_users(self):
+        """Comptes avec le nombre d'incidents actifs assignés (utile avant une désactivation)."""
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT u.id, u.username, u.full_name, u.role, u.disabled,
+                   (SELECT COUNT(*) FROM tickets t WHERE t.assigned_to = u.username AND t.status != 'CLOSED')
+                       AS active_incidents
+            FROM users u ORDER BY u.disabled, u.role, u.full_name
+            """
+        ).fetchall()
+        connection.close()
+        return [dict(r) for r in rows]
+
+    def create_user(self, username: str, full_name: str, role: str, password_hash: str):
+        connection = sqlite3.connect(self.db_path)
+        connection.execute(
+            "INSERT INTO users (username, full_name, role, password_hash, disabled) VALUES (?, ?, ?, ?, 0)",
+            (username, full_name, role, password_hash),
+        )
+        connection.commit()
+        connection.close()
+
+    def update_user(self, username: str, fields: dict):
+        allowed = {"full_name", "role", "disabled", "password_hash"}
+        fields = {k: v for k, v in fields.items() if k in allowed}
+        if not fields:
+            return 0
+        connection = sqlite3.connect(self.db_path)
+        set_clause = ", ".join(f"{key} = ?" for key in fields)
+        cursor = connection.execute(f"UPDATE users SET {set_clause} WHERE username = ?", [*fields.values(), username])
+        connection.commit()
+        count = cursor.rowcount
+        connection.close()
+        return count
+
+    def count_active_admins(self) -> int:
+        connection = sqlite3.connect(self.db_path)
+        count = connection.execute("SELECT COUNT(*) FROM users WHERE role = 'ADMIN' AND disabled = 0").fetchone()[0]
+        connection.close()
+        return count
+
+    # ------------------ AUDIT ------------------
+
+    def add_audit_event(self, actor: str, action: str, alert_id: str = None, ticket_id: str = None, details: dict = None):
+        """Ajoute un événement au journal. Il n'existe volontairement aucune méthode de modification ou de suppression."""
+        connection = sqlite3.connect(self.db_path)
+        connection.execute(
+            "INSERT INTO audit_events (occurred_at, actor, action, alert_id, ticket_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                actor or "system",
+                action,
+                alert_id,
+                ticket_id,
+                json.dumps(details) if details else None,
+            ),
+        )
+        connection.commit()
+        connection.close()
+
+    def get_audit_events(self, alert_id: str = None, ticket_id: str = None):
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT occurred_at, actor, action, alert_id, ticket_id, details FROM audit_events
+            WHERE (? IS NOT NULL AND alert_id = ?) OR (? IS NOT NULL AND ticket_id = ?)
+            ORDER BY id
+            """,
+            (alert_id, alert_id, ticket_id, ticket_id),
+        ).fetchall()
+        connection.close()
+        return [{**dict(r), "details": json.loads(r["details"]) if r["details"] else {}} for r in rows]
+
+    def get_account_events(self, limit: int = 50):
+        """Derniers événements de gestion des comptes (création, rôle, mot de passe, activation)."""
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT occurred_at, actor, action, details FROM audit_events
+            WHERE action LIKE 'USER_%' OR action IN ('PASSWORD_RESET', 'PASSWORD_CHANGED')
+            ORDER BY id DESC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        connection.close()
+        return [{**dict(r), "details": json.loads(r["details"]) if r["details"] else {}} for r in rows]

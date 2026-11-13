@@ -20,6 +20,46 @@ export type IncidentReport = {
   version: number;
 };
 
+// ─── System ──────────────────────────────────────────────────────────────────
+
+export type ApiHealth = { status: "healthy" | "degraded"; database: string; timestamp: string };
+
+/** Real API + database status (GET /api/health, no authentication required). */
+export async function fetchHealth(): Promise<ApiHealth> {
+  const res = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
+  if (!res.ok) throw new Error("API unavailable");
+  return res.json();
+}
+
+export type SystemStatus = {
+  version: string;
+  checked_at: string;
+  database: string;
+  threat_intel: { virustotal_configured: boolean; abuseipdb_configured: boolean };
+  llm: {
+    ollama_reachable: boolean;
+    local_models: { name: string; installed: boolean }[];
+    cloud_fallback_configured: boolean;
+    cloud_models: string[];
+  };
+  wazuh_webhook_enabled: boolean;
+  scoring: {
+    attack_types: Record<string, number>;
+    wazuh_frequency_tiers: [number, number][];
+    flow_frequency_tiers: [number, number][];
+    reputation_points: Record<string, number>;
+    mitre_points: number;
+    priority_thresholds: [number, string][];
+  };
+};
+
+/** Real platform configuration and scoring model (authenticated). */
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  const res = await fetch(`${API_BASE_URL}/system/status`, { headers: getHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load the platform status");
+  return res.json();
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export async function login(username: string, password: string) {
@@ -28,7 +68,16 @@ export async function login(username: string, password: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error("Invalid credentials");
+  if (res.status === 429) {
+    const minutes = Math.ceil(Number(res.headers.get("Retry-After") ?? "900") / 60);
+    throw new Error(`Too many failed attempts. Try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`);
+  }
+  if (res.status === 403) {
+    // Disabled account: the API only says so after a correct password.
+    const body = await res.json().catch(() => null);
+    throw new Error(typeof body?.detail === "string" ? body.detail : "This account is disabled.");
+  }
+  if (!res.ok) throw new Error("Invalid credentials. Please check your username and password.");
   return res.json();
 }
 
@@ -58,6 +107,43 @@ export async function fetchAlerts(params?: Record<string, string>) {
   const query = params ? `?${new URLSearchParams(params)}` : "";
   const res = await fetch(`${API_BASE_URL}/alerts${query}`, { headers: getHeaders() });
   if (!res.ok) throw new Error("Failed to fetch alerts");
+  return res.json();
+}
+
+export type AlertStatusCounts = Record<"NEW" | "UNDER_REVIEW" | "ESCALATED" | "DISMISSED", number>;
+
+/** One page of the alert queue plus the total number of matching alerts. */
+export async function fetchAlertPage<T>(params: Record<string, string>): Promise<{ alerts: T[]; total: number }> {
+  const res = await fetch(`${API_BASE_URL}/alerts?${new URLSearchParams(params)}`, { headers: getHeaders() });
+  if (!res.ok) throw new Error("Failed to fetch alerts");
+  const alerts: T[] = await res.json();
+  const total = Number(res.headers.get("X-Total-Count") ?? alerts.length);
+  return { alerts, total };
+}
+
+export async function fetchAlertStatusCounts(params: Record<string, string>): Promise<AlertStatusCounts> {
+  const res = await fetch(`${API_BASE_URL}/alerts/status-counts?${new URLSearchParams(params)}`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch alert counts");
+  return res.json();
+}
+
+export type TimelineEvent = {
+  at: string | null;
+  actor: string;
+  action: string;
+  source: "recorded" | "record" | "reconstructed";
+  details: Record<string, string | number | null>;
+  alert_id: string | null;
+  ticket_id: string | null;
+};
+
+/** Activity of one alert, or of a whole incident (alert + ticket + reports). */
+export async function fetchTimeline(kind: "alert" | "ticket", id: string): Promise<TimelineEvent[]> {
+  const path = kind === "alert" ? `alerts/${id}` : `tickets/${normalizeTicketId(id)}`;
+  const res = await fetch(`${API_BASE_URL}/${path}/timeline`, { headers: getHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load the activity");
   return res.json();
 }
 
@@ -141,7 +227,11 @@ export async function updateTicket(ticketId: string, updates: { status?: string;
     headers: getHeaders(),
     body: JSON.stringify(updates),
   });
-  if (!res.ok) throw new Error("Failed to update ticket");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = typeof body?.detail === "string" ? body.detail : null;
+    throw new Error(detail ?? "The change could not be saved.");
+  }
   return res.json();
 }
 
@@ -151,7 +241,10 @@ export async function generateIncidentReport(ticketId: string): Promise<Incident
     method: "POST",
     headers: getHeaders(),
   });
-  if (!res.ok) throw new Error("Failed to generate incident report");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? "Failed to generate the incident report. Please try again.");
+  }
   return res.json();
 }
 
@@ -171,4 +264,62 @@ export async function fetchAnalysts(role?: string) {
   const res = await fetch(`${API_BASE_URL}/users${query}`, { headers: getHeaders() });
   if (!res.ok) throw new Error("Failed to fetch analysts");
   return res.json();
+}
+
+// ─── Administration (ADMIN only) ─────────────────────────────────────────────
+
+export type ManagedUser = {
+  id: number;
+  username: string;
+  full_name: string;
+  role: "SOC_L1" | "SOC_L2" | "MANAGER" | "ADMIN";
+  disabled: boolean;
+  active_incidents: number;
+};
+
+export type AccountEvent = {
+  occurred_at: string;
+  actor: string;
+  action: string;
+  details: Record<string, string>;
+};
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}/admin${path}`, { ...init, headers: getHeaders(), cache: "no-store" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail;
+    // FastAPI validation errors come as a list
+    const message = typeof detail === "string" ? detail : Array.isArray(detail) ? detail.map((d) => d.msg).join(" · ") : null;
+    throw new Error(message ?? "The request failed.");
+  }
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+export const adminApi = {
+  listUsers: () => adminRequest<ManagedUser[]>("/users"),
+  createUser: (user: { username: string; full_name: string; role: string; password: string }) =>
+    adminRequest<ManagedUser>("/users", { method: "POST", body: JSON.stringify(user) }),
+  updateUser: (username: string, changes: { full_name?: string; role?: string; disabled?: boolean }) =>
+    adminRequest<ManagedUser>(`/users/${encodeURIComponent(username)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  resetPassword: (username: string, password: string) =>
+    adminRequest<void>(`/users/${encodeURIComponent(username)}/password`, { method: "POST", body: JSON.stringify({ password }) }),
+  accountEvents: () => adminRequest<AccountEvent[]>("/audit"),
+};
+
+/** Change one's own password (the current password is required). */
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/auth/password`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (res.ok) return;
+  if (res.status === 429) {
+    const minutes = Math.ceil(Number(res.headers.get("Retry-After") ?? "900") / 60);
+    throw new Error(`Too many failed attempts. Try again in ${minutes} minute${minutes > 1 ? "s" : ""}.`);
+  }
+  const body = await res.json().catch(() => null);
+  const detail = body?.detail;
+  throw new Error(typeof detail === "string" ? detail : "The new password must have at least 10 characters.");
 }

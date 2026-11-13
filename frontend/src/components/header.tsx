@@ -1,103 +1,92 @@
 "use client";
 
-import { useAuth } from "@/lib/use-auth";
-import { Clock, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
+import { fetchHealth } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 type HeaderProps = {
   title?: string;
 };
 
-function LiveClock() {
+type Health = "checking" | "ok" | "degraded" | "down";
+
+const HEALTH_LABEL: Record<Health, string> = {
+  checking: "Checking API…",
+  ok: "API connected",
+  degraded: "Database unreachable",
+  down: "API unreachable",
+};
+
+const HEALTH_DOT: Record<Health, string> = {
+  checking: "bg-muted-foreground",
+  ok: "bg-emerald-500",
+  degraded: "bg-amber-400",
+  down: "bg-red-500",
+};
+
+/** Real API/database status from GET /api/health, refreshed every 30 s. */
+function ApiStatus() {
+  const [health, setHealth] = useState<Health>("checking");
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = () =>
+      fetchHealth()
+        .then((h) => !cancelled && setHealth(h.status === "healthy" ? "ok" : "degraded"))
+        .catch(() => !cancelled && setHealth("down"))
+        .finally(() => !cancelled && setCheckedAt(new Date()));
+    check();
+    const t = setInterval(check, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  return (
+    <span
+      role="status"
+      className={cn("flex items-center gap-2 text-xs", health === "ok" ? "text-muted-foreground" : "text-foreground")}
+      title={checkedAt ? `Last checked ${checkedAt.toLocaleTimeString()}` : undefined}
+    >
+      <span aria-hidden className={cn("h-2 w-2 rounded-full", HEALTH_DOT[health])} />
+      {HEALTH_LABEL[health]}
+    </span>
+  );
+}
+
+/** UTC clock: the time reference analysts use to correlate logs across sources. */
+function UtcClock() {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
-    setNow(new Date());
-    const t = setInterval(() => setNow(new Date()), 1000);
+    const tick = () => setNow(new Date());
+    tick();
+    const t = setInterval(tick, 15000);
     return () => clearInterval(t);
   }, []);
 
   if (!now) return null;
-
-  const date = now.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-  const time = now.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toISOString().slice(11, 16);
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <Clock className="h-3.5 w-3.5 shrink-0" />
-      <span className="font-mono">
-        <span className="text-foreground/70">{date}</span>
-        {" — "}
-        <span className="text-primary font-semibold tabular-nums">{time}</span>
-      </span>
-    </div>
+    <span className="font-mono text-xs text-muted-foreground tabular-nums" title="Coordinated Universal Time">
+      {date} <span className="text-foreground">{time}</span> UTC
+    </span>
   );
 }
 
-const ROLE_PILL: Record<string, { label: string; className: string }> = {
-  SOC_L1: {
-    label: "SOC L1",
-    className: "bg-sky-500/10 text-sky-300 border-sky-500/25 ring-sky-500/10",
-  },
-  SOC_L2: {
-    label: "SOC L2",
-    className: "bg-violet-500/10 text-violet-300 border-violet-500/25 ring-violet-500/10",
-  },
-  SOC_MANAGER: {
-    label: "SOC Manager",
-    className: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25 ring-emerald-500/10",
-  },
-  MANAGER: {
-    label: "SOC Manager",
-    className: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25 ring-emerald-500/10",
-  },
-  ADMIN: {
-    label: "Admin",
-    className: "bg-rose-500/10 text-rose-300 border-rose-500/25 ring-rose-500/10",
-  },
-};
-
-export function Header({ title = "Dashboard" }: HeaderProps) {
-  const { user } = useAuth();
-  const rolePill = user?.role ? ROLE_PILL[user.role] : undefined;
-
+export function Header({ title = "Overview" }: HeaderProps) {
   return (
-    <header className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0 bg-card/50 backdrop-blur-sm">
-      {/* Left: page title */}
-      <div className="flex items-center gap-3">
-        <h1 className="text-base font-semibold text-foreground tracking-tight">{title}</h1>
-        {rolePill && (
-          <span
-            className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ring-1 ${rolePill.className}`}
-          >
-            {rolePill.label}
-          </span>
-        )}
-      </div>
-
-      {/* Right: clock + connection indicator */}
-      <div className="flex items-center gap-5">
-        <LiveClock />
-
-        <div className="flex items-center gap-2 text-xs">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-          <span className="hidden sm:inline text-muted-foreground font-medium">
-            API Live
-          </span>
-          <Wifi className="h-3.5 w-3.5 text-emerald-400" />
-        </div>
+    <header className="h-12 shrink-0 border-b border-border bg-background flex items-center justify-between gap-4 px-6">
+      <h1 className="text-sm font-semibold truncate">{title}</h1>
+      <div className="flex items-center gap-5 shrink-0">
+        <ApiStatus />
+        <span aria-hidden className="h-4 w-px bg-border hidden sm:block" />
+        <span className="hidden sm:inline">
+          <UtcClock />
+        </span>
       </div>
     </header>
   );
